@@ -1,0 +1,11 @@
+{
+  "appId": "app.chatnotice.mobile",
+  "appName": "ChatNotice",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

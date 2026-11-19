@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatNotice</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="scene" aria-hidden="true">
+  <span class="orb orb-a"></span>
+  <span class="orb orb-b"></span>
+  <span class="orb orb-c"></span>
+  <span class="spark sp-1"></span>
+  <span class="spark sp-2"></span>
+  <span class="spark sp-3"></span>
+  <span class="spark sp-4"></span>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark"></span>
+    <span class="brand-name">ChatNotice</span>
+    <span class="brand-sub">群消息 · 待办</span>
+  </div>
+  <div class="searchbar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input id="search" type="search" placeholder="搜索任务、文件或标签…" autocomplete="off" aria-label="搜索待办">
+  </div>
+  <div class="top-actions">
+    <span id="sync-state" class="sync-pill" title="每 4 秒自动同步">同步中…</span>
+    <button id="btn-pair" class="round-btn" aria-label="手机配对" title="手机配对">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>
+    </button>
+    <button id="btn-bell" class="round-btn" aria-label="通知" title="通知">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
+      <span class="bell-dot"></span>
+    </button>
+    <button id="btn-avatar" class="avatar" aria-label="关于此应用" title="关于">我</button>
+  </div>
+</header>
+
+<main class="workspace">
+  <section class="capture-zone">
+    <div class="capture-head">
+      <h1>任务气泡</h1>
+      <p>把文字和文件放进气泡，整理后加入右侧待办</p>
+    </div>
+    <div class="bubbles">
+      <article class="bubble" data-bubble="1">
+        <div class="blob" aria-hidden="true"><span class="caustic c1"></span><span class="caustic c2"></span></div>
+        <div class="bubble-inner">
+          <header class="bubble-head">
+            <span class="bubble-label">气泡 1</span>
+            <button class="bubble-clear" title="清空气泡" aria-label="清空气泡 1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </header>
+          <textarea class="bubble-text" rows="2" placeholder="拖入文字，或输入任务描述…" aria-label="气泡 1 任务描述"></textarea>
+          <div class="drop-row">
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+              <span>文字</span>
+              <input type="file" accept=".txt,.md,.csv" multiple hidden>
+            </label>
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m3 16 5-4 4 3 3-2 6 5"/></svg>
+              <span>图片</span>
+              <input type="file" accept="image/*" multiple hidden>
+            </label>
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
+              <span>文件</span>
+              <input type="file" multiple hidden>
+            </label>
+          </div>
+          <div class="chips"></div>
+          <footer class="bubble-foot">
+            <span class="ai-hint">AI 建议：待接入</span>
+            <button class="bubble-submit">加入待办</button>
+          </footer>
+        </div>
+      </article>
+
+      <article class="bubble" data-bubble="2">
+        <div class="blob" aria-hidden="true"><span class="caustic c1"></span><span class="caustic c2"></span></div>
+        <div class="bubble-inner">
+          <header class="bubble-head">
+            <span class="bubble-label">气泡 2</span>
+            <button class="bubble-clear" title="清空气泡" aria-label="清空气泡 2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </header>
+          <textarea class="bubble-text" rows="2" placeholder="另一个任务？拖进来就好…" aria-label="气泡 2 任务描述"></textarea>
+          <div class="drop-row">
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+              <span>文字</span>
+              <input type="file" accept=".txt,.md,.csv" multiple hidden>
+            </label>
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m3 16 5-4 4 3 3-2 6 5"/></svg>
+              <span>图片</span>
+              <input type="file" accept="image/*" multiple hidden>
+            </label>
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
+              <span>文件</span>
+              <input type="file" multiple hidden>
+            </label>
+          </div>
+          <div class="chips"></div>
+          <footer class="bubble-foot">
+            <span class="ai-hint">AI 建议：待接入</span>
+            <button class="bubble-submit">加入待办</button>
+          </footer>
+        </div>
+      </article>
+
+      <article class="bubble" data-bubble="3">
+        <div class="blob" aria-hidden="true"><span class="caustic c1"></span><span class="caustic c2"></span></div>
+        <div class="bubble-inner">
+          <header class="bubble-head">
+            <span class="bubble-label">气泡 3</span>
+            <button class="bubble-clear" title="清空气泡" aria-label="清空气泡 3">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </header>
+          <textarea class="bubble-text" rows="2" placeholder="多件事同时记，互不混淆…" aria-label="气泡 3 任务描述"></textarea>
+          <div class="drop-row">
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+              <span>文字</span>
+              <input type="file" accept=".txt,.md,.csv" multiple hidden>
+            </label>
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m3 16 5-4 4 3 3-2 6 5"/></svg>
+              <span>图片</span>
+              <input type="file" accept="image/*" multiple hidden>
+            </label>
+            <label class="drop-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
+              <span>文件</span>
+              <input type="file" multiple hidden>
+            </label>
+          </div>
+          <div class="chips"></div>
+          <footer class="bubble-foot">
+            <span class="ai-hint">AI 建议：待接入</span>
+            <button class="bubble-submit">加入待办</button>
+          </footer>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <aside class="workbench">
+    <div class="wb-head">
+      <h2>待办事项</h2>
+      <div class="wb-tools">
+        <button id="btn-filter" class="round-btn small" aria-label="筛选" title="筛选">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>
+        </button>
+        <button id="btn-add" class="round-btn small accent" aria-label="新建任务" title="新建任务">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div id="filter-pop" class="filter-pop hidden">
+        <button data-view="active" class="active">待办</button>
+        <button data-view="done">已完成</button>
+        <button data-view="removed">已移除</button>
+        <button data-view="all">全部</button>
+      </div>
+    </div>
+    <div id="task-list" class="wb-list"></div>
+    <div class="wb-foot">
+      <button id="btn-new-task" class="pill primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建任务
+      </button>
+      <button id="btn-upload" class="pill ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        上传素材
+      </button>
+      <button id="btn-overview" class="pill ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        查看概览
+      </button>
+      <input id="quick-upload" type="file" multiple hidden>
+    </div>
+  </aside>
+</main>
+
+<div id="drawer-mask" class="mask hidden"></div>
+<aside id="drawer" class="drawer hidden" aria-label="事项详情">
+  <div class="drawer-head">
+    <h3>事项详情</h3>
+    <button id="drawer-close" class="round-btn small" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <label class="field">标题<input id="f-title" maxlength="300"></label>
+    <div class="field-row">
+      <label class="field">截止时间<input id="f-due" type="datetime-local"></label>
+      <label class="field">截止提示<input id="f-due-label" maxlength="100" placeholder="如：11/22 12:00前"></label>
+    </div>
+    <label class="field">说明<textarea id="f-note" rows="8" maxlength="12000"></textarea></label>
+    <label class="check-row"><input id="f-optional" type="checkbox"> 可选事项（不完成也不紧迫）</label>
+    <div id="draft-warn" class="warn hidden"></div>
+  </div>
+  <div class="drawer-foot">
+    <button id="btn-delete" class="danger-ghost">移除</button>
+    <div class="spacer"></div>
+    <button id="btn-save" class="primary-btn">保存</button>
+  </div>
+</aside>
+
+<div id="modal-mask" class="mask hidden"></div>
+<div id="modal" class="modal hidden">
+  <h3>新建任务</h3>
+  <label class="field">标题<input id="n-title" maxlength="300" placeholder="要做什么？"></label>
+  <div class="field-row">
+    <label class="field">截止时间<input id="n-due" type="datetime-local"></label>
+    <label class="field">截止提示<input id="n-due-label" maxlength="100" placeholder="可选，如：周五前"></label>
+  </div>
+  <label class="field">说明<textarea id="n-note" rows="4" maxlength="12000" placeholder="可选"></textarea></label>
+  <div class="modal-foot">
+    <button id="modal-cancel" class="ghost-btn">取消</button>
+    <button id="modal-create" class="primary-btn">创建</button>
+  </div>
+</div>
+
+<div id="overview-mask" class="mask hidden"></div>
+<div id="overview" class="modal hidden">
+  <h3>工作台概览</h3>
+  <div id="overview-body" class="overview-grid"></div>
+  <div class="modal-foot">
+    <button id="overview-close" class="ghost-btn">关闭</button>
+  </div>
+</div>
+
+<div id="pair-mask" class="mask hidden"></div>
+<div id="pair" class="modal hidden">
+  <h3>手机配对</h3>
+  <div class="pair-body">
+    <img id="pair-qr" alt="配对二维码">
+    <div class="pair-info">
+      <p>用 ChatNotice 手机端扫描二维码完成配对。外网使用时，可在手机端填写隧道地址和同一令牌。</p>
+      <label class="field">服务器地址<input id="pair-url" readonly></label>
+      <label class="field">访问令牌<input id="pair-token" readonly></label>
+      <button id="pair-copy" class="ghost-btn">复制地址与令牌</button>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button id="pair-close" class="ghost-btn">关闭</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
