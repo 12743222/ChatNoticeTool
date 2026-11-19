@@ -192,9 +192,26 @@ def open_database(config: dict, platform: str, relative: str):
         connection.text_factory = lambda b: b.decode("utf-8", errors="replace")
         try:
             clock = time.monotonic()
-            result = connection.execute("PRAGMA quick_check").fetchall()
+            try:
+                result = connection.execute("PRAGMA quick_check").fetchall()
+            except sqlite3.OperationalError as error:
+                if "no such tokenizer" not in str(error):
+                    raise
+                # Newer QQ clients ship FTS virtual tables with a custom
+                # tokenizer; stock SQLite cannot compile them. Check the
+                # regular tables individually and leave virtual tables alone.
+                result = []
+                for (name,) in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"):
+                    quoted = '"' + name.replace('"', '""') + '"'
+                    try:
+                        result.extend(connection.execute(
+                            "PRAGMA quick_check(" + quoted + ")").fetchall())
+                    except sqlite3.OperationalError:
+                        continue
+                metadata["quick_check_fallback"] = "virtual_tables_skipped_unknown_tokenizer"
             phases['sqlite_check_seconds'] = round(time.monotonic() - clock, 4)
-            if len(result) != 1 or result[0][0] != "ok":
+            if not result or any(row[0] != "ok" for row in result):
                 raise ValueError("Decoded snapshot failed SQLite consistency check")
             metadata["sqlite_quick_check"] = "ok"
             yield connection, metadata
