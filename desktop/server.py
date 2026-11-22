@@ -12,23 +12,54 @@ import json
 import re
 import secrets
 import socket
+import threading
+import time
 import uuid
+from collections import defaultdict, deque
 from datetime import datetime
 from pathlib import Path
 
 import qrcode
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from project_core import project_path
 from todo_store import TodoStore
 
+from . import automation
+from .scheduler import scheduler
+from .tunnel import tunnel
+
 APP_VERSION = '2.1.0-dev'
 UI_DIR = Path(__file__).resolve().parent / 'ui'
 VIRTUAL_NETWORKS = [ipaddress.ip_network('198.18.0.0/15')]
+RATE_LIMIT = 120
+AUTH_FAILURE_LIMIT = 10
+_RATE_LOCK = threading.Lock()
+_RATE_WINDOWS: dict[tuple[str, str], deque] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = (request.headers.get('cf-connecting-ip')
+                 or request.headers.get('x-forwarded-for') or '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.client.host if request.client else 'unknown'
+
+
+def _rate_hit(ip: str, kind: str, limit: int) -> bool:
+    now = time.monotonic()
+    with _RATE_LOCK:
+        window = _RATE_WINDOWS[(ip, kind)]
+        while window and now - window[0] > 60:
+            window.popleft()
+        if len(window) >= limit:
+            return False
+        window.append(now)
+        return True
 
 
 def _store() -> TodoStore:
@@ -126,6 +157,24 @@ class ClearCompleted(BaseModel):
     ids: list[str]
 
 
+class TunnelToggle(BaseModel):
+    enabled: bool
+
+
+class AutomationSettings(BaseModel):
+    window_start: str
+    window_end: str
+    check_interval_seconds: int
+    min_read_interval_minutes: int
+    model: str = 'deepseek-flash'
+    daily_model_call_limit: int = 20
+    auto_start: bool = False
+    enabled: bool = False
+    privacy_confirmed: bool = False
+    api_key: str | None = None
+    clear_api_key: bool = False
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title='ChatNotice', version=APP_VERSION)
 
@@ -133,6 +182,10 @@ def create_app() -> FastAPI:
     async def access_guard(request: Request, call_next):
         if _is_trusted_local(request):
             return await call_next(request)
+        ip = _client_ip(request)
+        if not _rate_hit(ip, 'all', RATE_LIMIT):
+            return JSONResponse({'ok': False, 'error': 'rate_limited'},
+                                status_code=429, headers={'Retry-After': '30'})
         if request.url.path.startswith('/api'):
             supplied = (request.headers.get('x-api-token')
                         or request.query_params.get('token')
@@ -140,6 +193,9 @@ def create_app() -> FastAPI:
             token = get_token()
             if supplied and secrets.compare_digest(supplied, token):
                 return await call_next(request)
+            if not _rate_hit(ip, 'authfail', AUTH_FAILURE_LIMIT):
+                return JSONResponse({'ok': False, 'error': 'rate_limited'},
+                                    status_code=429, headers={'Retry-After': '30'})
             return JSONResponse({'ok': False, 'error': 'unauthorized'},
                                 status_code=401)
         return JSONResponse({'ok': False, 'error': 'not_found'}, status_code=404)
@@ -258,8 +314,79 @@ def create_app() -> FastAPI:
                           'stored': f'{folder_rel}/{target.name}'})
         return {'ok': True, 'files': saved}
 
+    @app.get('/api/inbox/{relpath:path}')
+    def read_inbox(relpath: str):
+        root = project_path('state/inbox').resolve()
+        try:
+            candidate = (root / relpath).resolve()
+            candidate.relative_to(root)
+        except (ValueError, OSError):
+            raise HTTPException(404, '文件不存在')
+        if not candidate.is_file():
+            raise HTTPException(404, '文件不存在')
+        return FileResponse(candidate, filename=candidate.name,
+                            content_disposition_type='inline')
+
+    @app.get('/api/settings/automation')
+    def get_automation(request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可修改读取设置')
+        return {'ok': True, **automation.public_state(), 'running': scheduler.busy()}
+
+    @app.put('/api/settings/automation')
+    def save_automation(body: AutomationSettings, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可修改读取设置')
+        try:
+            will_have_key = automation.api_key_set()
+            if body.clear_api_key:
+                will_have_key = False
+            elif body.api_key:
+                will_have_key = True
+            if body.enabled:
+                if not will_have_key:
+                    raise ValueError('请先保存 DeepSeek API Key')
+                if not body.privacy_confirmed:
+                    raise ValueError('请先确认隐私提示')
+            if body.clear_api_key:
+                automation.clear_api_key()
+            elif body.api_key:
+                automation.save_api_key(body.api_key)
+            automation.save_config(body.model_dump())
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+        warning = None
+        try:
+            automation.set_auto_start(body.auto_start)
+        except (OSError, ValueError) as error:
+            warning = f'开机自启未生效：{error}'
+        state = automation.public_state()
+        if warning:
+            state['auto_start_warning'] = warning
+        state['running'] = scheduler.busy()
+        return {'ok': True, **state}
+
+    @app.post('/api/automation/run')
+    def run_automation(request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可触发读取')
+        if not automation.api_key_set():
+            raise HTTPException(400, '请先保存 DeepSeek API Key')
+        if scheduler.busy():
+            raise HTTPException(409, '已有读取在进行')
+        if not scheduler.request_manual_run():
+            raise HTTPException(409, '已有读取在进行')
+        return {'ok': True, 'started': True}
+
+    @app.post('/api/pairing/tunnel')
+    def toggle_tunnel(body: TunnelToggle, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可修改公网访问')
+        tunnel.set_enabled(body.enabled)
+        return {'ok': True, 'tunnel': tunnel.status()}
+
     @app.get('/api/pairing')
-    def pairing(request: Request):
+    def pairing(request: Request, mode: str = ''):
         if not _is_trusted_local(request):
             raise HTTPException(403, '仅本机可查看配对信息')
         port = request.url.port
@@ -267,15 +394,21 @@ def create_app() -> FastAPI:
         if not urls:
             urls = [f'http://127.0.0.1:{port}']
         token = get_token()
-        payload = json.dumps({'v': 1, 'url': urls[0], 'token': token},
-                             ensure_ascii=False)
-        image = qrcode.make(payload)
+        tunnel_state = tunnel.status()
+        remote_url = tunnel_state.get('url') if tunnel_state.get('enabled') else None
+        preferred = ('remote' if remote_url else 'lan') if mode not in ('lan', 'remote') else mode
+        qr_url = remote_url if preferred == 'remote' and remote_url else urls[0]
+        qr_payload = json.dumps({'v': 2, 'url': qr_url, 'token': token,
+                                 'lan': urls, 'remote': remote_url,
+                                 'preferred': preferred}, ensure_ascii=False)
+        image = qrcode.make(qr_payload)
         buffer = io.BytesIO()
         image.save(buffer, format='PNG')
         qr_png = 'data:image/png;base64,' + base64.b64encode(
             buffer.getvalue()).decode('ascii')
-        return {'ok': True, 'urls': urls, 'token': token,
-                'qr_payload': payload, 'qr_png': qr_png}
+        return {'ok': True, 'urls': urls, 'remote_url': remote_url,
+                'preferred': preferred, 'tunnel': tunnel_state, 'token': token,
+                'qr_payload': qr_payload, 'qr_png': qr_png}
 
     @app.get('/api/groups')
     def groups():

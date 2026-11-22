@@ -4,9 +4,15 @@ const $ = (sel) => document.querySelector(sel);
 const state = {
   view: 'active', tasks: [], current: null, base: '', token: '',
   signature: null, syncSeq: 0,
+  pairMode: localStorage.getItem('cn_mode') === 'remote' ? 'remote' : 'lan',
+  cache: { active: [], done: [] },
+  cacheAt: { active: 0, done: 0 },
 };
 let syncTimer = null;
 let syncLoopStarted = false;
+let scanStream = null;
+let scanTimer = null;
+const scanCanvas = document.createElement('canvas');
 
 /* ---------- storage ---------- */
 
@@ -98,6 +104,167 @@ function showPairError(text) {
   el.classList.toggle('hidden', !text);
 }
 
+function setScanState(text) {
+  const el = $('#scan-state');
+  el.textContent = text || '';
+  el.classList.toggle('hidden', !text);
+}
+
+function setPairMode(mode) {
+  state.pairMode = mode === 'remote' ? 'remote' : 'lan';
+  localStorage.setItem('cn_mode', state.pairMode);
+  $('#pair-mode-lan').classList.toggle('active', state.pairMode === 'lan');
+  $('#pair-mode-remote').classList.toggle('active', state.pairMode === 'remote');
+  $('#pair-hint').textContent = state.pairMode === 'remote'
+    ? '公网：手机可在任意网络；扫码后请确认电脑端已开启公网访问。'
+    : '局域网：手机和电脑需在同一 Wi-Fi；首次连接时请在电脑上允许防火墙访问。';
+}
+
+function parsePairPayload(text) {
+  let data;
+  try { data = JSON.parse(text); } catch { return null; }
+  if (!data || typeof data.token !== 'string' || !data.token) return null;
+  const lan = Array.isArray(data.lan)
+    ? data.lan.filter((value) => typeof value === 'string')
+    : (typeof data.url === 'string' ? [data.url] : []);
+  return {
+    token: data.token,
+    lan,
+    remote: typeof data.remote === 'string' ? data.remote : null,
+    preferred: data.preferred === 'remote' ? 'remote' : 'lan',
+  };
+}
+
+async function decodeQrImage(dataUrl) {
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error('图片无法读取'));
+    image.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  const code = window.jsQR
+    ? window.jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })
+    : null;
+  return code ? code.data : null;
+}
+
+async function probeServer(base, token) {
+  try {
+    const res = await fetch(base + '/api/status', {
+      cache: 'no-store',
+      headers: { 'X-Api-Token': token },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function connectFromQr(text) {
+  const payload = parsePairPayload(text);
+  if (!payload) {
+    setScanState('二维码不是 ChatNotice 配对码');
+    return;
+  }
+  const candidates = state.pairMode === 'remote'
+    ? (payload.remote ? [payload.remote] : [])
+    : payload.lan;
+  if (!candidates.length) {
+    setScanState(state.pairMode === 'remote'
+      ? '该二维码没有公网地址，请先在电脑端开启公网访问'
+      : '该二维码没有局域网地址');
+    return;
+  }
+  setScanState('识别成功，正在连接…');
+  for (const candidate of candidates) {
+    const base = normalizeBase(candidate);
+    if (base && await probeServer(base, payload.token)) {
+      $('#pair-url').value = base;
+      $('#pair-token').value = payload.token;
+      await connect();
+      return;
+    }
+  }
+  setScanState('二维码中的地址都连接失败，请检查网络或重新扫码');
+}
+
+async function handleQrImage(dataUrl) {
+  try {
+    const text = await decodeQrImage(dataUrl);
+    if (!text) {
+      setScanState('没有识别到二维码，请靠近并重试');
+      return;
+    }
+    await connectFromQr(text);
+  } catch (error) {
+    setScanState('二维码识别失败：' + (error.message || '图片无法读取'));
+  }
+}
+
+function stopLiveScan() {
+  clearInterval(scanTimer);
+  scanTimer = null;
+  if (scanStream) {
+    scanStream.getTracks().forEach((track) => track.stop());
+    scanStream = null;
+  }
+  const video = $('#scan-video');
+  video.srcObject = null;
+  $('#scan-view').classList.add('hidden');
+}
+
+function scanFrame() {
+  const video = $('#scan-video');
+  if (!scanStream || video.readyState < 2) return;
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return;
+  const scale = Math.min(1, 720 / Math.max(width, height));
+  scanCanvas.width = Math.round(width * scale);
+  scanCanvas.height = Math.round(height * scale);
+  const context = scanCanvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+  const pixels = context.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+  const code = window.jsQR
+    ? window.jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'dontInvert' })
+    : null;
+  if (code) {
+    const text = code.data;
+    stopLiveScan();
+    connectFromQr(text);
+  }
+}
+
+async function scanPair() {
+  setScanState('');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setScanState('当前环境不支持相机，请从相册选择二维码图片');
+    $('#qr-file').click();
+    return;
+  }
+  $('#scan-view').classList.remove('hidden');
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    const video = $('#scan-video');
+    video.srcObject = scanStream;
+    await video.play();
+    clearInterval(scanTimer);
+    scanTimer = setInterval(scanFrame, 180);
+  } catch (error) {
+    stopLiveScan();
+    setScanState('无法打开相机：' + (error.message || '权限被拒绝') + '，可从相册选择二维码');
+  }
+}
+
 async function connect() {
   const base = normalizeBase($('#pair-url').value);
   const token = $('#pair-token').value.trim();
@@ -120,9 +287,14 @@ async function connect() {
     state.base = base;
     state.token = token;
     pairStore.save(base, token);
+    localStorage.setItem('cn_mode', state.pairMode);
+    setScanState('');
     enterMain();
   } catch (error) {
-    showPairError('连接失败：' + error.message + '。请确认手机和电脑在同一 Wi-Fi，地址与令牌填写正确。');
+    const hintText = state.pairMode === 'remote'
+      ? '请确认电脑端已开启公网访问，且二维码未过期。'
+      : '请确认手机和电脑在同一 Wi-Fi，地址与令牌填写正确。';
+    showPairError('连接失败：' + error.message + '。' + hintText);
   } finally {
     btn.disabled = false;
     btn.textContent = '连接';
@@ -135,6 +307,12 @@ function enterMain() {
   $('#main-view').classList.remove('hidden');
   startSyncLoop();
   refreshAll();
+  api('/todos?view=done')
+    .then((list) => {
+      state.cache.done = list.tasks;
+      state.cacheAt.done = Date.now();
+    })
+    .catch(() => {});
 }
 
 function showPairing() {
@@ -143,6 +321,8 @@ function showPairing() {
   const saved = pairStore.get();
   $('#pair-url').value = saved.base;
   $('#pair-token').value = saved.token;
+  setPairMode(state.pairMode);
+  setScanState('');
 }
 
 /* ---------- data ---------- */
@@ -181,6 +361,8 @@ async function refreshAll({ silent = false, notify = false } = {}) {
     ]);
     if (seq !== state.syncSeq) return;
     state.tasks = list.tasks;
+    state.cache[state.view] = list.tasks;
+    state.cacheAt[state.view] = Date.now();
     $('#tab-active-count').textContent = status.counts.active;
     $('#tab-done-count').textContent = status.counts.done;
     const signature = [state.view, taskSignature(list.tasks)].join('|');
@@ -212,6 +394,7 @@ function startSyncLoop() {
   window.addEventListener('offline', () => setSyncState('offline'));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshAll({ silent: true });
+    else stopLiveScan();
   });
 }
 
@@ -385,6 +568,24 @@ function openAdd() {
 /* ---------- events ---------- */
 
 $('#btn-connect').addEventListener('click', connect);
+$('#btn-scan').addEventListener('click', scanPair);
+$('#pair-mode-lan').addEventListener('click', () => setPairMode('lan'));
+$('#pair-mode-remote').addEventListener('click', () => setPairMode('remote'));
+$('#scan-close').addEventListener('click', stopLiveScan);
+$('#scan-file').addEventListener('click', () => {
+  stopLiveScan();
+  $('#qr-file').click();
+});
+$('#qr-file').addEventListener('change', (event) => {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  setScanState('正在识别二维码…');
+  const reader = new FileReader();
+  reader.onload = () => handleQrImage(reader.result);
+  reader.onerror = () => setScanState('无法读取图片');
+  reader.readAsDataURL(file);
+});
 $('#pair-token').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') connect();
 });
@@ -396,6 +597,8 @@ $('#btn-settings').addEventListener('click', () => {
     state.base = '';
     state.token = '';
     state.signature = null;
+    state.cache = { active: [], done: [] };
+    state.cacheAt = { active: 0, done: 0 };
     clearInterval(syncTimer);
     syncTimer = null;
     showPairing();
@@ -407,7 +610,14 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     state.view = btn.dataset.view;
-    refreshAll();
+    if (state.cacheAt[state.view]) {
+      state.tasks = state.cache[state.view];
+      state.signature = [state.view, taskSignature(state.tasks)].join('|');
+      renderList();
+    } else {
+      $('#list').innerHTML = '<div class="empty">加载中…</div>';
+    }
+    refreshAll({ silent: true });
   });
 });
 

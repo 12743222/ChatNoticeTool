@@ -50,6 +50,53 @@ input, textarea { font: inherit; color: var(--ink); }
   box-shadow: 0 18px 44px rgba(96, 140, 200, .16);
   backdrop-filter: blur(20px);
 }
+.pair-modes {
+  display: flex; gap: 5px; margin-bottom: 14px; padding: 3px;
+  border-radius: 12px; background: rgba(240, 247, 255, .85);
+  border: 1px solid rgba(170, 205, 240, .35);
+}
+.pair-mode { flex: 1; padding: 8px; border-radius: 9px; font-size: 13px; color: var(--ink-soft); }
+.pair-mode.active {
+  background: #fff; color: var(--accent-deep); font-weight: 600;
+  box-shadow: 0 2px 8px rgba(96, 140, 200, .18);
+}
+.scan-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px; margin-bottom: 16px; border-radius: 13px;
+  border: 1px dashed rgba(75, 141, 248, .5);
+  background: rgba(238, 246, 255, .9); color: var(--accent-deep);
+  font-size: 13.5px; font-weight: 600;
+}
+.scan-btn svg { width: 18px; height: 18px; }
+.scan-state { margin: -6px 0 12px; font-size: 12px; color: var(--ink-soft); text-align: center; }
+.scan-view {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  background: #000; overflow: hidden;
+}
+.scan-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan-frame {
+  position: relative; z-index: 2;
+  width: 66vw; height: 66vw; max-width: 280px; max-height: 280px;
+  border: 2px solid rgba(255, 255, 255, .92); border-radius: 18px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .48), inset 0 0 30px rgba(255, 255, 255, .12);
+}
+.scan-hint {
+  position: absolute; bottom: 112px; z-index: 3; margin: 0;
+  color: #fff; font-size: 13px; text-shadow: 0 1px 6px rgba(0, 0, 0, .6);
+}
+.scan-close {
+  position: absolute; top: max(18px, env(safe-area-inset-top)); right: 18px; z-index: 4;
+  width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, .45); color: #fff;
+}
+.scan-close svg { width: 20px; height: 20px; }
+.scan-file {
+  position: absolute; bottom: 56px; z-index: 3;
+  color: rgba(255, 255, 255, .85); font-size: 12px;
+  text-decoration: underline; text-underline-offset: 4px;
+}
 .field { display: block; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 14px; }
 .field input, .field textarea {
   margin-top: 6px; width: 100%; padding: 12px 14px;

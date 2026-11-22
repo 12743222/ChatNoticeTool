@@ -36,7 +36,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
       <span class="bell-dot"></span>
     </button>
-    <button id="btn-avatar" class="avatar" aria-label="关于此应用" title="关于">我</button>
+    <button id="btn-settings" class="round-btn" aria-label="设置" title="设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
   </div>
 </header>
 
@@ -50,12 +52,6 @@
       <article class="bubble" data-bubble="1">
         <div class="blob" aria-hidden="true"><span class="caustic c1"></span><span class="caustic c2"></span></div>
         <div class="bubble-inner">
-          <header class="bubble-head">
-            <span class="bubble-label">气泡 1</span>
-            <button class="bubble-clear" title="清空气泡" aria-label="清空气泡 1">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-            </button>
-          </header>
           <textarea class="bubble-text" rows="2" placeholder="拖入文字，或输入任务描述…" aria-label="气泡 1 任务描述"></textarea>
           <div class="drop-row">
             <label class="drop-btn">
@@ -85,12 +81,6 @@
       <article class="bubble" data-bubble="2">
         <div class="blob" aria-hidden="true"><span class="caustic c1"></span><span class="caustic c2"></span></div>
         <div class="bubble-inner">
-          <header class="bubble-head">
-            <span class="bubble-label">气泡 2</span>
-            <button class="bubble-clear" title="清空气泡" aria-label="清空气泡 2">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-            </button>
-          </header>
           <textarea class="bubble-text" rows="2" placeholder="另一个任务？拖进来就好…" aria-label="气泡 2 任务描述"></textarea>
           <div class="drop-row">
             <label class="drop-btn">
@@ -120,12 +110,6 @@
       <article class="bubble" data-bubble="3">
         <div class="blob" aria-hidden="true"><span class="caustic c1"></span><span class="caustic c2"></span></div>
         <div class="bubble-inner">
-          <header class="bubble-head">
-            <span class="bubble-label">气泡 3</span>
-            <button class="bubble-clear" title="清空气泡" aria-label="清空气泡 3">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-            </button>
-          </header>
           <textarea class="bubble-text" rows="2" placeholder="多件事同时记，互不混淆…" aria-label="气泡 3 任务描述"></textarea>
           <div class="drop-row">
             <label class="drop-btn">
@@ -157,10 +141,10 @@
   <aside class="workbench">
     <div class="wb-head">
       <h2>待办事项</h2>
+      <button id="btn-filter" class="wb-filter" aria-label="筛选" title="筛选">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>
+      </button>
       <div class="wb-tools">
-        <button id="btn-filter" class="round-btn small" aria-label="筛选" title="筛选">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>
-        </button>
         <button id="btn-add" class="round-btn small accent" aria-label="新建任务" title="新建任务">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
         </button>
@@ -182,9 +166,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
         上传素材
       </button>
-      <button id="btn-overview" class="pill ghost">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-        查看概览
+      <button id="btn-completed" class="pill ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>
+        已完成待办
       </button>
       <input id="quick-upload" type="file" multiple hidden>
     </div>
@@ -206,6 +190,10 @@
       <label class="field">截止提示<input id="f-due-label" maxlength="100" placeholder="如：11/22 12:00前"></label>
     </div>
     <label class="field">说明<textarea id="f-note" rows="8" maxlength="12000"></textarea></label>
+    <div id="f-attachments" class="attach-block hidden">
+      <span class="attach-label">附件</span>
+      <div id="f-attach-list" class="attach-list"></div>
+    </div>
     <label class="check-row"><input id="f-optional" type="checkbox"> 可选事项（不完成也不紧迫）</label>
     <div id="draft-warn" class="warn hidden"></div>
   </div>
@@ -231,30 +219,161 @@
   </div>
 </div>
 
-<div id="overview-mask" class="mask hidden"></div>
-<div id="overview" class="modal hidden">
-  <h3>工作台概览</h3>
-  <div id="overview-body" class="overview-grid"></div>
+<div id="completed-mask" class="mask hidden"></div>
+<div id="completed" class="modal completed-modal hidden">
+  <h3>已完成待办</h3>
+  <div id="completed-list" class="completed-list"></div>
   <div class="modal-foot">
-    <button id="overview-close" class="ghost-btn">关闭</button>
+    <button id="completed-close" class="ghost-btn">关闭</button>
   </div>
 </div>
 
 <div id="pair-mask" class="mask hidden"></div>
-<div id="pair" class="modal hidden">
-  <h3>手机配对</h3>
+<div id="pair" class="modal pair-modal hidden">
+  <div class="pair-head">
+    <h3>手机配对</h3>
+    <div class="pair-tabs">
+      <button id="pair-mode-lan" class="active" type="button">局域网</button>
+      <button id="pair-mode-remote" type="button">公网</button>
+    </div>
+  </div>
   <div class="pair-body">
-    <img id="pair-qr" alt="配对二维码">
+    <div class="pair-qr-wrap">
+      <img id="pair-qr" alt="配对二维码">
+      <div id="pair-qr-placeholder" class="pair-qr-placeholder hidden">开启公网访问后生成二维码</div>
+    </div>
     <div class="pair-info">
-      <p>用 ChatNotice 手机端扫描二维码完成配对。外网使用时，可在手机端填写隧道地址和同一令牌。</p>
-      <label class="field">服务器地址<input id="pair-url" readonly></label>
+      <p id="pair-desc">手机与电脑在同一 Wi-Fi 时使用局域网；扫描二维码自动配对。</p>
+      <div id="pair-remote-box" class="pair-remote hidden">
+        <label class="settings-row switch-row">
+          <span class="settings-key">公网访问<small>通过 Cloudflare 临时隧道</small></span>
+          <span class="switch">
+            <input id="pair-remote-toggle" type="checkbox">
+            <span class="switch-knob"></span>
+          </span>
+        </label>
+        <div id="pair-remote-status" class="pair-status">未开启</div>
+        <p class="pair-warn">电脑重启后公网地址会变化；待办内容会经过 Cloudflare 传输。</p>
+      </div>
+      <label class="field">服务器地址<input id="pair-url" readonly placeholder="尚未就绪"></label>
       <label class="field">访问令牌<input id="pair-token" readonly></label>
-      <button id="pair-copy" class="ghost-btn">复制地址与令牌</button>
+      <button id="pair-copy" class="ghost-btn">复制当前模式地址与令牌</button>
     </div>
   </div>
   <div class="modal-foot">
     <button id="pair-close" class="ghost-btn">关闭</button>
   </div>
+</div>
+
+<div id="settings-mask" class="mask hidden"></div>
+<div id="settings" class="modal settings-modal hidden">
+  <div class="settings-head">
+    <h3>设置</h3>
+    <button id="settings-close" class="round-btn small" aria-label="关闭设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="settings-body">
+    <section class="settings-section">
+      <h4>消息读取</h4>
+      <p class="settings-desc">仅在设定时间段内、桌面端运行时检查群消息，其余时间暂停。</p>
+      <label class="settings-row switch-row">
+        <span class="settings-key">自动读取<small>发现新消息时自动生成待办</small></span>
+        <span class="switch">
+          <input id="s-enabled" type="checkbox">
+          <span class="switch-knob"></span>
+        </span>
+      </label>
+      <label class="settings-row switch-row">
+        <span class="settings-key">隐私确认<small>候选消息正文会发送给 DeepSeek</small></span>
+        <span class="switch">
+          <input id="s-privacy" type="checkbox">
+          <span class="switch-knob"></span>
+        </span>
+      </label>
+      <div id="auto-status" class="auto-status">
+        <span id="auto-status-line">尚未运行</span>
+        <button id="btn-run-now" class="ghost-btn small-btn" type="button">立即读取一次</button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-key">允许读取时间段</span>
+        <div class="time-range">
+          <input id="s-window-start" type="time" value="08:00" aria-label="开始时间">
+          <span>至</span>
+          <input id="s-window-end" type="time" value="22:00" aria-label="结束时间">
+        </div>
+      </div>
+      <label class="settings-row">
+        <span class="settings-key">检查新消息间隔<small>只做轻量文件检查，不读取消息内容</small></span>
+        <select id="s-check-interval">
+          <option value="30">30 秒</option>
+          <option value="60">1 分钟</option>
+          <option value="120">2 分钟</option>
+          <option value="300">5 分钟</option>
+          <option value="600">10 分钟</option>
+        </select>
+      </label>
+      <label class="settings-row">
+        <span class="settings-key">完整读取最短间隔<small>源库有新消息时才真正读取，避免频繁读盘</small></span>
+        <select id="s-min-read">
+          <option value="1">1 分钟</option>
+          <option value="3">3 分钟</option>
+          <option value="5">5 分钟</option>
+          <option value="10">10 分钟</option>
+          <option value="15">15 分钟</option>
+          <option value="30">30 分钟</option>
+          <option value="60">60 分钟</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="settings-section">
+      <h4>启动</h4>
+      <label class="settings-row switch-row">
+        <span class="settings-key">开机自启<small>登录 Windows 后自动运行 ChatNotice</small></span>
+        <span class="switch">
+          <input id="s-auto-start" type="checkbox">
+          <span class="switch-knob"></span>
+        </span>
+      </label>
+    </section>
+
+    <section class="settings-section">
+      <h4>AI 进阶设置</h4>
+      <p class="settings-desc">仅用于生成待办；密钥使用 Windows DPAPI 加密保存在本机。</p>
+      <div class="settings-row">
+        <span class="settings-key">DeepSeek API Key<small id="key-state">未保存</small></span>
+        <div class="key-row">
+          <input id="s-api-key" type="password" autocomplete="off" placeholder="sk-…">
+          <button id="btn-clear-key" class="ghost-btn small-btn" type="button">清除</button>
+        </div>
+      </div>
+      <label class="settings-row">
+        <span class="settings-key">模型</span>
+        <select id="s-model">
+          <option value="deepseek-flash">deepseek-flash（推荐）</option>
+          <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+        </select>
+      </label>
+      <label class="settings-row">
+        <span class="settings-key">每日调用上限<small>达到后只读取，不再调用模型</small></span>
+        <input id="s-call-limit" class="number-input" type="number" min="1" max="96" value="20">
+      </label>
+    </section>
+  </div>
+  <div class="modal-foot settings-foot">
+    <span class="settings-version">ChatNotice v2.1.0-dev</span>
+    <button id="settings-cancel" class="ghost-btn">取消</button>
+    <button id="settings-save" class="primary-btn">保存</button>
+  </div>
+</div>
+
+<div id="lightbox-mask" class="mask hidden"></div>
+<div id="lightbox" class="lightbox hidden">
+  <img id="lightbox-img" alt="附件预览">
+  <button id="lightbox-close" class="round-btn small lightbox-close" aria-label="关闭预览">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
 </div>
 
 <div id="toast" class="toast hidden"></div>

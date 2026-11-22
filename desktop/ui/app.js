@@ -8,6 +8,7 @@ const state = {
   original: null,
   signature: null,
   syncSeq: 0,
+  animating: false,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -44,6 +45,29 @@ function formatSize(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
+function isImageFile(name) {
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(
+    String(name || '').split('.').pop().toLowerCase());
+}
+
+function inboxUrl(stored) {
+  const rel = String(stored || '').replace(/\\/g, '/').replace(/^state\/inbox\//, '');
+  return '/api/inbox/' + rel.split('/').map(encodeURIComponent).join('/');
+}
+
+function openLightbox(url, alt) {
+  $('#lightbox-img').src = url;
+  $('#lightbox-img').alt = alt || '附件预览';
+  $('#lightbox').classList.remove('hidden');
+  $('#lightbox-mask').classList.remove('hidden');
+}
+
+function closeLightbox() {
+  $('#lightbox').classList.add('hidden');
+  $('#lightbox-mask').classList.add('hidden');
+  $('#lightbox-img').removeAttribute('src');
+}
+
 /* ---------- time formatting ---------- */
 
 function toInputValue(due) {
@@ -75,7 +99,7 @@ function timeLabel(task) {
   if (!task.due) return task.due_label || '无截止时间';
   const info = dueInfo(task.due);
   let text = info.label;
-  if (task.due_label) text += ' · ' + task.due_label;
+  if (task.due_label && task.due_label !== info.label) text += ' · ' + task.due_label;
   return text;
 }
 
@@ -135,6 +159,7 @@ function isEditing() {
 }
 
 async function syncTasks({ silent = false } = {}) {
+  if (state.animating) return;
   if (silent && isEditing()) return;
   const seq = ++state.syncSeq;
   if (!silent) setSyncState('syncing');
@@ -200,6 +225,10 @@ function renderTasks() {
 function renderCard(task) {
   const card = document.createElement('div');
   card.className = 'wb-card' + (task.done && !task.removed ? ' completed' : '');
+  card.dataset.taskId = task.id;
+
+  const side = document.createElement('div');
+  side.className = 'wb-side';
 
   const check = document.createElement('button');
   check.className = 'wb-check' + (task.done ? ' checked' : '');
@@ -208,25 +237,9 @@ function renderCard(task) {
   if (task.removed) check.disabled = true;
   check.addEventListener('click', (event) => {
     event.stopPropagation();
-    toggleDone(task);
+    toggleDone(task, card);
   });
-  card.append(check);
-
-  const main = document.createElement('div');
-  main.className = 'wb-main';
-  main.addEventListener('click', () => openDrawer(task));
-
-  const title = document.createElement('div');
-  title.className = 'wb-title';
-  title.textContent = task.title;
-  main.append(title);
-
-  if (task.note) {
-    const note = document.createElement('div');
-    note.className = 'wb-note';
-    note.textContent = task.note;
-    main.append(note);
-  }
+  side.append(check);
 
   const time = document.createElement('div');
   time.className = 'wb-time ' + timeClass(task);
@@ -244,7 +257,16 @@ function renderCard(task) {
   const label = document.createElement('span');
   label.textContent = timeLabel(task);
   time.append(clock, label);
-  main.append(time);
+  side.append(time);
+  card.append(side);
+
+  const main = document.createElement('div');
+  main.className = 'wb-main';
+  main.addEventListener('click', () => openDrawer(task));
+  const title = document.createElement('div');
+  title.className = 'wb-title';
+  title.textContent = task.title;
+  main.append(title);
   card.append(main);
 
   const status = statusOf(task);
@@ -258,14 +280,117 @@ function renderCard(task) {
 
 /* ---------- task actions ---------- */
 
-async function toggleDone(task) {
+function dissolveCard(card) {
+  return new Promise((resolve) => {
+    if (!card || !card.isConnected) {
+      resolve();
+      return;
+    }
+    const rect = card.getBoundingClientRect();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || rect.width < 8 || rect.height < 8) {
+      card.classList.add('dissolving');
+      setTimeout(resolve, 300);
+      return;
+    }
+    const titleEl = card.querySelector('.wb-title');
+    const noteEl = card.querySelector('.wb-note');
+    const statusEl = card.querySelector('.wb-status');
+    const colors = [
+      titleEl ? getComputedStyle(titleEl).color : '#17335a',
+      noteEl ? getComputedStyle(noteEl).color : '#5d7899',
+      statusEl ? getComputedStyle(statusEl).backgroundColor : '#eef3fa',
+      '#ffffff', '#4b8df8', '#b9d7fb',
+    ].filter((color) => color && color !== 'rgba(0, 0, 0, 0)');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const canvas = document.createElement('canvas');
+    canvas.className = 'dissolve-canvas';
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    canvas.style.left = rect.left + 'px';
+    canvas.style.top = rect.top + 'px';
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    document.body.append(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const count = Math.min(150, Math.max(60, Math.round(rect.width * rect.height / 800)));
+    const particles = [];
+    for (let index = 0; index < count; index += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 30 + Math.random() * 110;
+      particles.push({
+        x: Math.random() * rect.width,
+        y: Math.random() * rect.height,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 18,
+        size: 1.3 + Math.random() * 2.8,
+        life: 0.55 + Math.random() * 0.35,
+        age: 0,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+    card.classList.add('dissolving');
+    let previous = performance.now();
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      canvas.remove();
+      resolve();
+    };
+    const frame = (now) => {
+      const delta = Math.min(0.05, (now - previous) / 1000);
+      previous = now;
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      let alive = false;
+      for (const particle of particles) {
+        particle.age += delta;
+        const progress = particle.age / particle.life;
+        if (progress >= 1) continue;
+        alive = true;
+        particle.vy += 110 * delta;
+        particle.vx *= 0.992;
+        particle.vy *= 0.992;
+        particle.x += particle.vx * delta;
+        particle.y += particle.vy * delta;
+        ctx.globalAlpha = Math.max(0, 1 - progress);
+        ctx.fillStyle = particle.color;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y,
+          Math.max(0.35, particle.size * (1 - progress * 0.75)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if (alive) requestAnimationFrame(frame);
+      else finish();
+    };
+    requestAnimationFrame(frame);
+    setTimeout(finish, 1100);
+  });
+}
+
+async function toggleDone(task, card) {
+  const markingDone = !task.done;
+  const check = card ? card.querySelector('.wb-check') : null;
+  if (check) check.disabled = true;
+  if (markingDone) state.animating = true;
   try {
     await api(`/todos/${encodeURIComponent(task.id)}/done`, {
       method: 'POST',
       body: JSON.stringify({ value: !task.done }),
     });
+    if (markingDone) await dissolveCard(card);
+    state.animating = false;
     await syncTasks();
+    if (card && card.isConnected) {
+      card.classList.remove('dissolving');
+      if (check) check.disabled = false;
+    }
   } catch (error) {
+    state.animating = false;
+    if (card) card.classList.remove('dissolving');
+    if (check) check.disabled = false;
     toast(error.message);
   }
 }
@@ -286,6 +411,57 @@ async function setRemoved(task, removed) {
 
 /* ---------- drawer ---------- */
 
+function noteAttachments(note) {
+  const items = [];
+  for (const line of String(note || '').split('\n')) {
+    const match = line.trim().match(/^- (.+?)（([^（）]*)）→ (state\/inbox\/.+)$/);
+    if (match) items.push({ name: match[1], size: match[2], stored: match[3] });
+  }
+  return items;
+}
+
+function renderAttachments(note) {
+  const block = $('#f-attachments');
+  const list = $('#f-attach-list');
+  list.innerHTML = '';
+  const items = noteAttachments(note);
+  block.classList.toggle('hidden', !items.length);
+  for (const item of items) {
+    const url = inboxUrl(item.stored);
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'attach-item';
+    row.title = isImageFile(item.name) ? '查看图片' : '打开文件';
+    if (isImageFile(item.name)) {
+      const img = document.createElement('img');
+      img.className = 'attach-thumb';
+      img.src = url;
+      img.alt = item.name;
+      row.append(img);
+    } else {
+      const icon = document.createElement('span');
+      icon.className = 'attach-icon';
+      icon.textContent = chipType(item.name).text;
+      row.append(icon);
+    }
+    const text = document.createElement('span');
+    text.className = 'attach-text';
+    const name = document.createElement('span');
+    name.className = 'attach-name';
+    name.textContent = item.name;
+    const size = document.createElement('span');
+    size.className = 'attach-size';
+    size.textContent = item.size || '附件';
+    text.append(name, size);
+    row.append(text);
+    row.addEventListener('click', () => {
+      if (isImageFile(item.name)) openLightbox(url, item.name);
+      else window.open(url, '_blank', 'noopener');
+    });
+    list.append(row);
+  }
+}
+
 function openDrawer(task) {
   state.current = task;
   state.original = { ...task };
@@ -293,6 +469,7 @@ function openDrawer(task) {
   $('#f-due').value = toInputValue(task.due);
   $('#f-due-label').value = task.due_label || '';
   $('#f-note').value = task.note || '';
+  renderAttachments(task.note);
   $('#f-optional').checked = Boolean(task.optional);
   $('#draft-warn').classList.add('hidden');
   $('#btn-delete').textContent = task.removed ? '恢复' : '移除';
@@ -404,68 +581,285 @@ function setView(view) {
   syncTasks();
 }
 
-/* ---------- overview ---------- */
+/* ---------- completed ---------- */
 
-async function openOverview() {
-  $('#overview-mask').classList.remove('hidden');
-  $('#overview').classList.remove('hidden');
-  const body = $('#overview-body');
-  body.innerHTML = '<div class="ov-line">统计加载中…</div>';
+function formatDoneAt(value) {
+  if (!value) return '已完成';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '已完成';
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+async function openCompleted() {
+  $('#completed-mask').classList.remove('hidden');
+  $('#completed').classList.remove('hidden');
+  await loadCompleted();
+}
+
+function closeCompleted() {
+  $('#completed-mask').classList.add('hidden');
+  $('#completed').classList.add('hidden');
+}
+
+async function loadCompleted() {
+  const body = $('#completed-list');
+  body.innerHTML = '<div class="completed-empty">加载中…</div>';
   try {
-    const [status, groups] = await Promise.all([api('/status'), api('/groups')]);
+    const data = await api('/todos?view=done');
     body.innerHTML = '';
-    const stats = [
-      ['待办', status.counts.active],
-      ['已完成', status.counts.done],
-      ['已移除', status.counts.removed],
-    ];
-    for (const [label, num] of stats) {
-      const box = document.createElement('div');
-      box.className = 'ov-stat';
-      const n = document.createElement('div'); n.className = 'num'; n.textContent = num;
-      const l = document.createElement('div'); l.className = 'lbl'; l.textContent = label;
-      box.append(n, l);
-      body.append(box);
+    if (!data.tasks.length) {
+      const empty = document.createElement('div');
+      empty.className = 'completed-empty';
+      empty.textContent = '还没有已完成的待办';
+      body.append(empty);
+      return;
     }
-    const line = document.createElement('div');
-    line.className = 'ov-line';
-    line.textContent = `消息来源 ${groups.groups.length} 个群 · ChatNotice v${status.version} · 本地运行`;
-    body.append(line);
+    for (const task of data.tasks) body.append(renderCompletedItem(task));
   } catch (error) {
     body.innerHTML = '';
-    const line = document.createElement('div');
-    line.className = 'ov-line';
-    line.textContent = '统计加载失败：' + error.message;
-    body.append(line);
+    const empty = document.createElement('div');
+    empty.className = 'completed-empty';
+    empty.textContent = '加载失败：' + error.message;
+    body.append(empty);
   }
 }
 
-function closeOverview() {
-  $('#overview-mask').classList.add('hidden');
-  $('#overview').classList.add('hidden');
+function renderCompletedItem(task) {
+  const item = document.createElement('div');
+  item.className = 'completed-item';
+  const main = document.createElement('div');
+  main.className = 'completed-main';
+  const title = document.createElement('div');
+  title.className = 'completed-title';
+  title.textContent = task.title;
+  const meta = document.createElement('div');
+  meta.className = 'completed-meta';
+  meta.textContent = '完成于 ' + formatDoneAt(task.done_at)
+    + (task.due_label ? ' · ' + task.due_label : '');
+  main.append(title, meta);
+  const undo = document.createElement('button');
+  undo.className = 'undo-btn';
+  undo.textContent = '撤销';
+  undo.addEventListener('click', () => undoCompleted(task, undo));
+  item.append(main, undo);
+  return item;
+}
+
+async function undoCompleted(task, button) {
+  button.disabled = true;
+  button.textContent = '撤销中…';
+  try {
+    await api(`/todos/${encodeURIComponent(task.id)}/done`, {
+      method: 'POST',
+      body: JSON.stringify({ value: false }),
+    });
+    toast('已撤销完成');
+    await Promise.all([syncTasks(), loadCompleted()]);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = '撤销';
+    toast(error.message);
+  }
 }
 
 /* ---------- pairing ---------- */
 
-async function openPairing() {
-  $('#pair-mask').classList.remove('hidden');
-  $('#pair').classList.remove('hidden');
-  $('#pair-qr').removeAttribute('src');
-  $('#pair-url').value = '';
-  $('#pair-token').value = '';
+let pairMode = 'lan';
+let pairData = null;
+let pairPoll = null;
+
+function renderPairing() {
+  if (!pairData) return;
+  const tunnelState = pairData.tunnel || {};
+  const enabled = Boolean(tunnelState.enabled);
+  const ready = Boolean(pairData.remote_url);
+  $('#pair-remote-toggle').checked = enabled;
+  const states = {
+    disabled: '未开启',
+    downloading: '正在下载 cloudflared…',
+    starting: '正在建立外网通道…',
+    ready: '已就绪',
+    error: tunnelState.error || '连接失败',
+  };
+  const status = $('#pair-remote-status');
+  status.textContent = enabled
+    ? (states[tunnelState.state] || tunnelState.state || '连接中…')
+    : '未开启';
+  status.classList.toggle('ready', ready);
+  status.classList.toggle('error', enabled && tunnelState.state === 'error');
+  const remoteReady = pairMode !== 'remote' || ready;
+  const url = pairMode === 'remote'
+    ? (pairData.remote_url || '')
+    : (pairData.urls[0] || '');
+  $('#pair-url').value = url;
+  $('#pair-token').value = pairData.token || '';
+  $('#pair-qr').classList.toggle('hidden', !remoteReady);
+  $('#pair-qr-placeholder').classList.toggle('hidden', remoteReady);
+  if (remoteReady && pairData.qr_png && $('#pair-qr').getAttribute('src') !== pairData.qr_png) {
+    $('#pair-qr').src = pairData.qr_png;
+  }
+}
+
+async function refreshPairing() {
   try {
-    const data = await api('/pairing');
-    $('#pair-qr').src = data.qr_png;
-    $('#pair-url').value = data.urls[0] || '';
-    $('#pair-token').value = data.token;
+    pairData = await api('/pairing?mode=' + pairMode);
+    renderPairing();
   } catch (error) {
     toast(error.message);
   }
 }
 
+async function setPairMode(mode) {
+  pairMode = mode;
+  $('#pair-mode-lan').classList.toggle('active', mode === 'lan');
+  $('#pair-mode-remote').classList.toggle('active', mode === 'remote');
+  $('#pair-remote-box').classList.toggle('hidden', mode !== 'remote');
+  $('#pair-desc').textContent = mode === 'remote'
+    ? '手机在任意网络时使用公网；扫码后由手机选择连接方式。'
+    : '手机与电脑在同一 Wi-Fi 时使用局域网；扫描二维码自动配对。';
+  await refreshPairing();
+}
+
+async function openPairing() {
+  $('#pair-mask').classList.remove('hidden');
+  $('#pair').classList.remove('hidden');
+  clearInterval(pairPoll);
+  await setPairMode(pairMode);
+  pairPoll = setInterval(refreshPairing, 3000);
+}
+
 function closePairing() {
   $('#pair-mask').classList.add('hidden');
   $('#pair').classList.add('hidden');
+  clearInterval(pairPoll);
+  pairPoll = null;
+}
+
+/* ---------- settings ---------- */
+
+let settingsPoll = null;
+let pendingClearKey = false;
+
+function updateAutoStatus(data) {
+  const parts = [];
+  if (data.running) parts.push('读取中…');
+  parts.push(`今日调用 ${data.model_calls_today}/${data.daily_model_call_limit}`);
+  const labels = { ok: '成功', empty: '无新消息', limited: '已达上限', error: '异常' };
+  if (data.last_result) {
+    const run = data.last_result;
+    parts.push('上次：' + (labels[run.status] || run.status || '未知'));
+    if (run.status === 'ok') {
+      parts.push(`新增 ${run.created} 条`);
+    }
+    if (run.error) parts.push(run.error);
+  } else {
+    parts.push('尚未运行');
+  }
+  if (data.next_check_at) {
+    parts.push('下次检查 ' + data.next_check_at.slice(11, 16));
+  }
+  $('#auto-status-line').textContent = parts.join(' · ');
+  $('#btn-run-now').disabled = Boolean(data.running);
+}
+
+async function refreshAutomationStatus() {
+  try {
+    const data = await api('/settings/automation');
+    updateAutoStatus(data);
+  } catch { /* keep last status */ }
+}
+
+async function loadSettings() {
+  try {
+    const data = await api('/settings/automation');
+    $('#s-window-start').value = data.window_start;
+    $('#s-window-end').value = data.window_end;
+    $('#s-check-interval').value = String(data.check_interval_seconds);
+    $('#s-min-read').value = String(data.min_read_interval_minutes);
+    $('#s-auto-start').checked = Boolean(data.auto_start);
+    $('#s-enabled').checked = Boolean(data.enabled);
+    $('#s-privacy').checked = Boolean(data.privacy_confirmed);
+    $('#s-model').value = data.model;
+    $('#s-call-limit').value = data.daily_model_call_limit;
+    $('#s-api-key').value = '';
+    $('#key-state').textContent = data.api_key_set ? '已保存' : '未保存';
+    $('#s-api-key').placeholder = data.api_key_set ? '已保存，留空不修改' : 'sk-…';
+    pendingClearKey = false;
+    updateAutoStatus(data);
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+function openSettings() {
+  $('#settings').classList.remove('hidden');
+  $('#settings-mask').classList.remove('hidden');
+  loadSettings();
+  clearInterval(settingsPoll);
+  settingsPoll = setInterval(refreshAutomationStatus, 4000);
+}
+
+function closeSettings() {
+  $('#settings').classList.add('hidden');
+  $('#settings-mask').classList.add('hidden');
+  clearInterval(settingsPoll);
+  settingsPoll = null;
+}
+
+async function saveSettings() {
+  const windowStart = $('#s-window-start').value;
+  const windowEnd = $('#s-window-end').value;
+  if (!windowStart || !windowEnd) { toast('请填写完整的允许读取时间段'); return; }
+  if (windowStart === windowEnd) { toast('开始时间和结束时间不能相同'); return; }
+  if ($('#s-enabled').checked && !$('#s-privacy').checked) {
+    toast('开启自动读取前请先确认隐私提示');
+    return;
+  }
+  const button = $('#settings-save');
+  button.disabled = true;
+  try {
+    const body = {
+      window_start: windowStart,
+      window_end: windowEnd,
+      check_interval_seconds: Number($('#s-check-interval').value),
+      min_read_interval_minutes: Number($('#s-min-read').value),
+      auto_start: $('#s-auto-start').checked,
+      enabled: $('#s-enabled').checked,
+      privacy_confirmed: $('#s-privacy').checked,
+      model: $('#s-model').value,
+      daily_model_call_limit: Number($('#s-call-limit').value),
+    };
+    const apiKey = $('#s-api-key').value.trim();
+    if (apiKey) body.api_key = apiKey;
+    if (pendingClearKey) body.clear_api_key = true;
+    const data = await api('/settings/automation', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    toast(data.auto_start_warning || '设置已保存');
+    closeSettings();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function runAutomationNow() {
+  if (!$('#s-api-key').value.trim() && $('#key-state').textContent !== '已保存') {
+    toast('请先保存 DeepSeek API Key');
+    return;
+  }
+  try {
+    await api('/automation/run', { method: 'POST', body: '{}' });
+    toast('已开始读取，完成后会自动刷新待办');
+    $('#btn-run-now').disabled = true;
+    setTimeout(refreshAutomationStatus, 1500);
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 /* ---------- bubbles ---------- */
@@ -483,27 +877,67 @@ function chipType(name) {
   return { text: ext.slice(0, 4).toUpperCase() || 'FILE', cls: '' };
 }
 
+function bubbleText(bubble) {
+  return [bubble.capturedText, bubble.textEl.value]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function updateTextLine(bubble) {
+  const captured = bubble.capturedText.trim();
+  if (!captured) {
+    bubble.captureEl.classList.add('hidden');
+    bubble.textEl.classList.remove('has-captured');
+    return;
+  }
+  const firstLine = captured.split('\n').map((line) => line.trim()).find(Boolean) || '';
+  bubble.captureEl.classList.remove('hidden');
+  bubble.textEl.classList.add('has-captured');
+  const line = bubble.captureEl.querySelector('.tp-line');
+  line.textContent = firstLine;
+  line.title = captured;
+}
+
 function renderChips(bubble) {
   bubble.chipsEl.innerHTML = '';
+  updateTextLine(bubble);
   for (const file of bubble.files) {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    const type = chipType(file.name);
-    const tag = document.createElement('span');
-    tag.className = 'ftype ' + type.cls;
-    tag.textContent = type.text;
-    const name = document.createElement('span');
-    name.className = 'fname';
-    name.textContent = file.name;
-    name.title = `${file.name} · ${formatSize(file.size)}`;
+    const image = isImageFile(file.name);
+    if (image) {
+      chip.classList.add('image-chip');
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.src = inboxUrl(file.stored);
+      img.alt = file.name;
+      img.title = '点击查看大图';
+      img.addEventListener('click', () => openLightbox(img.src, file.name));
+      img.addEventListener('error', () => img.remove());
+      chip.append(img);
+    } else {
+      const type = chipType(file.name);
+      chip.classList.add('file-chip');
+      const tile = document.createElement('span');
+      tile.className = 'file-thumb ' + type.cls;
+      tile.title = `${file.name} · ${formatSize(file.size)}`;
+      tile.append(svgEl('M6 3h9l4 4v14H6z M14 3v5h5', '0 0 24 24'));
+      const ext = document.createElement('span');
+      ext.className = 'file-ext';
+      ext.textContent = type.text;
+      tile.append(ext);
+      chip.append(tile);
+    }
     const remove = document.createElement('button');
     remove.textContent = '×';
+    remove.className = 'chip-clear';
     remove.setAttribute('aria-label', '移除附件');
     remove.addEventListener('click', () => {
       bubble.files = bubble.files.filter((f) => f !== file);
       renderChips(bubble);
     });
-    chip.append(tag, name, remove);
+    chip.append(remove);
     bubble.chipsEl.append(chip);
   }
   updateBubbleState(bubble);
@@ -540,7 +974,7 @@ async function uploadFiles(fileList, bubble) {
 }
 
 async function submitBubble(bubble) {
-  const text = bubble.textEl.value.trim();
+  const text = bubbleText(bubble);
   if (!text && !bubble.files.length) { toast('先写点描述，或放入文件'); return; }
   if (bubble.uploading > 0) { toast('还有文件在上传中…'); return; }
   const firstLine = text.split('\n').map((line) => line.trim()).find(Boolean);
@@ -559,6 +993,7 @@ async function submitBubble(bubble) {
       body: JSON.stringify({ title, due: null, due_label: '', note: parts.join('\n\n'), optional: false }),
     });
     bubble.textEl.value = '';
+    bubble.capturedText = '';
     bubble.files = [];
     renderChips(bubble);
     toast('已加入右侧待办');
@@ -570,21 +1005,70 @@ async function submitBubble(bubble) {
   }
 }
 
+function appendCapturedText(bubble, text) {
+  const clean = String(text || '').trim();
+  if (!clean) return;
+  bubble.capturedText = bubble.capturedText
+    ? bubble.capturedText + '\n' + clean
+    : clean;
+  renderChips(bubble);
+  toast('已放入文字');
+}
+
 function initBubbles() {
   document.querySelectorAll('.bubble').forEach((el) => {
     const bubble = {
       el,
       files: [],
       uploading: 0,
+      capturedText: '',
       textEl: el.querySelector('.bubble-text'),
       chipsEl: el.querySelector('.chips'),
       submit: el.querySelector('.bubble-submit'),
     };
+    const inner = el.querySelector('.bubble-inner');
+    const hint = document.createElement('div');
+    hint.className = 'drop-hint';
+    hint.textContent = '松开，文字或文件放进气泡';
+    inner.append(hint);
+    const captureLine = document.createElement('div');
+    captureLine.className = 'capture-line hidden';
+    const lineText = document.createElement('span');
+    lineText.className = 'tp-line';
+    const lineClear = document.createElement('button');
+    lineClear.type = 'button';
+    lineClear.className = 'tp-clear';
+    lineClear.textContent = '×';
+    lineClear.setAttribute('aria-label', '清空气泡文字');
+    lineClear.addEventListener('click', (event) => {
+      event.stopPropagation();
+      bubble.capturedText = '';
+      bubble.textEl.value = '';
+      renderChips(bubble);
+    });
+    captureLine.append(lineText, lineClear);
+    captureLine.addEventListener('click', () => bubble.textEl.focus());
+    inner.append(captureLine);
+    bubble.captureEl = captureLine;
     el.querySelectorAll('input[type=file]').forEach((input) => {
       input.addEventListener('change', () => {
         if (input.files && input.files.length) uploadFiles(input.files, bubble);
         input.value = '';
       });
+    });
+    bubble.textEl.addEventListener('input', () => renderChips(bubble));
+    bubble.textEl.addEventListener('paste', (event) => {
+      const files = [...(event.clipboardData?.files || [])];
+      if (files.length) {
+        event.preventDefault();
+        uploadFiles(files, bubble);
+        return;
+      }
+      const text = event.clipboardData?.getData('text/plain');
+      if (text && text.trim()) {
+        event.preventDefault();
+        appendCapturedText(bubble, text);
+      }
     });
     el.addEventListener('dragenter', (event) => {
       event.preventDefault();
@@ -592,6 +1076,7 @@ function initBubbles() {
     });
     el.addEventListener('dragover', (event) => {
       event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
       el.classList.add('dragover');
     });
     el.addEventListener('dragleave', (event) => {
@@ -601,14 +1086,14 @@ function initBubbles() {
     el.addEventListener('drop', (event) => {
       event.preventDefault();
       el.classList.remove('dragover');
-      if (event.dataTransfer && event.dataTransfer.files.length) {
-        uploadFiles(event.dataTransfer.files, bubble);
+      const data = event.dataTransfer;
+      if (!data) return;
+      if (data.files && data.files.length) {
+        uploadFiles(data.files, bubble);
+        return;
       }
-    });
-    el.querySelector('.bubble-clear').addEventListener('click', () => {
-      bubble.textEl.value = '';
-      bubble.files = [];
-      renderChips(bubble);
+      const text = data.getData('text/plain') || data.getData('text');
+      appendCapturedText(bubble, text);
     });
     bubble.submit.addEventListener('click', () => submitBubble(bubble));
     renderChips(bubble);
@@ -654,14 +1139,34 @@ $('#search').addEventListener('input', (event) => {
   }, 200);
 });
 
-$('#btn-overview').addEventListener('click', openOverview);
-$('#overview-close').addEventListener('click', closeOverview);
-$('#overview-mask').addEventListener('click', closeOverview);
+$('#btn-completed').addEventListener('click', openCompleted);
+$('#completed-close').addEventListener('click', closeCompleted);
+$('#completed-mask').addEventListener('click', closeCompleted);
 
 $('#btn-pair').addEventListener('click', openPairing);
 $('#pair-close').addEventListener('click', closePairing);
 $('#pair-mask').addEventListener('click', closePairing);
+$('#pair-mode-lan').addEventListener('click', () => setPairMode('lan'));
+$('#pair-mode-remote').addEventListener('click', () => setPairMode('remote'));
+$('#pair-remote-toggle').addEventListener('change', async (event) => {
+  const enabled = event.target.checked;
+  event.target.disabled = true;
+  try {
+    await api('/pairing/tunnel', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+    toast(enabled ? '正在建立公网通道…' : '已关闭公网访问');
+    await refreshPairing();
+  } catch (error) {
+    event.target.checked = !enabled;
+    toast(error.message);
+  } finally {
+    event.target.disabled = false;
+  }
+});
 $('#pair-copy').addEventListener('click', async () => {
+  if (!$('#pair-url').value) { toast('当前模式地址尚未就绪'); return; }
   const text = `地址：${$('#pair-url').value}\n令牌：${$('#pair-token').value}`;
   try {
     await navigator.clipboard.writeText(text);
@@ -671,21 +1176,39 @@ $('#pair-copy').addEventListener('click', async () => {
   }
 });
 
+$('#lightbox-close').addEventListener('click', closeLightbox);
+$('#lightbox-mask').addEventListener('click', closeLightbox);
+
 $('#btn-upload').addEventListener('click', () => $('#quick-upload').click());
 $('#quick-upload').addEventListener('change', (event) => {
   if (event.target.files.length) uploadFiles(event.target.files, bubbles[0]);
   event.target.value = '';
 });
 
+$('#btn-settings').addEventListener('click', openSettings);
+$('#settings-close').addEventListener('click', closeSettings);
+$('#settings-cancel').addEventListener('click', closeSettings);
+$('#settings-mask').addEventListener('click', closeSettings);
+$('#settings-save').addEventListener('click', saveSettings);
+$('#btn-run-now').addEventListener('click', runAutomationNow);
+$('#btn-clear-key').addEventListener('click', () => {
+  pendingClearKey = true;
+  $('#s-api-key').value = '';
+  $('#s-api-key').placeholder = '保存后清除';
+  $('#key-state').textContent = '待清除（保存后生效）';
+  $('#s-enabled').checked = false;
+});
+
 $('#btn-bell').addEventListener('click', () => toast('通知中心开发中'));
-$('#btn-avatar').addEventListener('click', () => toast('ChatNotice · 本地运行 · v2.0.0-dev'));
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeDrawer();
     closeModal();
-    closeOverview();
+    closeCompleted();
     closePairing();
+    closeSettings();
+    closeLightbox();
     $('#filter-pop').classList.add('hidden');
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {

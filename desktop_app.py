@@ -43,9 +43,17 @@ def main() -> None:
     import uvicorn
     import webview
     from PIL import Image
+    from desktop.automation import ensure_auto_start
+    from desktop.scheduler import scheduler
     from desktop.server import create_app
+    from desktop.tunnel import load_enabled, tunnel
 
+    ensure_auto_start()
+    scheduler.start()
     port = free_port()
+    tunnel.configure(port)
+    if load_enabled():
+        tunnel.start()
     server = uvicorn.Server(
         uvicorn.Config(create_app(), host=BIND_HOST, port=port, log_level='warning'))
     threading.Thread(target=server.run, daemon=True).start()
@@ -86,6 +94,8 @@ def main() -> None:
 
     webview.start()
     server.should_exit = True
+    scheduler.stop()
+    tunnel.stop()
     tray.stop()
 
 

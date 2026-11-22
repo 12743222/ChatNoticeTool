@@ -49,6 +49,7 @@ def redact_media_secrets(text: str) -> str:
 def readable_card(text: str) -> str:
     try: data=json.loads(text)
     except (ValueError,TypeError): return text
+    if not isinstance(data,dict): return text
     if data.get('app')=='com.tencent.mannounce':
         card=data.get('meta',{}).get('mannounce',{})
         if card.get('encode')==1 and card.get('text'):
