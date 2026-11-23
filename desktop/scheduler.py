@@ -253,6 +253,15 @@ class AutomationScheduler:
     def busy(self) -> bool:
         return self._run_lock.locked() or automation.lock_state().get('locked', False)
 
+    def trigger_startup_run(self) -> bool:
+        """Read once when the desktop app opens, ignoring the normal throttle."""
+        config = automation.load_config()
+        if not config.get('enabled') or not config.get('privacy_confirmed'):
+            return False
+        if not automation.api_key_set():
+            return False
+        return self.request_manual_run()
+
     def request_manual_run(self) -> bool:
         if self.busy():
             return False

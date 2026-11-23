@@ -58,6 +58,7 @@ def main() -> None:
         uvicorn.Config(create_app(), host=BIND_HOST, port=port, log_level='warning'))
     threading.Thread(target=server.run, daemon=True).start()
     wait_ready(f'http://127.0.0.1:{port}/api/status')
+    scheduler.trigger_startup_run()
 
     window = webview.create_window(
         APP_TITLE, f'http://127.0.0.1:{port}',

@@ -664,6 +664,377 @@ async function undoCompleted(task, button) {
   }
 }
 
+/* ---------- group setup ---------- */
+
+const setupState = { data: null, groups: [], sourcesOk: [], wechatPaths: null };
+
+function setupStep(step) {
+  for (let index = 1; index <= 4; index += 1) {
+    $(`#setup-step-${index}`).classList.toggle('hidden', index !== step);
+  }
+  document.querySelectorAll('.setup-steps span').forEach((span) => {
+    span.classList.toggle('active', Number(span.dataset.step) === step);
+  });
+}
+
+function setupPlatformCard(title, info) {
+  const card = document.createElement('div');
+  card.className = 'setup-platform';
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  card.append(strong);
+  const lines = [
+    info.source ? `已配置来源：${info.source}` : '尚未配置来源',
+    info.path ? `数据目录：${info.path}` : '未找到数据目录',
+    `已登录客户端进程：${info.processes} 个`,
+  ];
+  for (const line of lines) {
+    const div = document.createElement('div');
+    div.textContent = line;
+    card.append(div);
+  }
+  return card;
+}
+
+async function scanSources() {
+  const box = $('#setup-detect');
+  box.textContent = '检测中…';
+  try {
+    const data = await api('/setup/scan');
+    setupState.data = data;
+    const qqSource = (data.sources || []).find((item) => item.platform === 'qq');
+    const wxSource = (data.sources || []).find((item) => item.platform === 'wechat');
+    const qqPath = qqSource?.paths?.database_dir || data.candidates.qq?.[0]?.paths?.database_dir || '';
+    const wxPaths = wxSource?.paths || data.candidates.wechat?.[0]?.paths || null;
+    setupState.wechatPaths = wxPaths || null;
+    box.innerHTML = '';
+    box.append(
+      setupPlatformCard('QQ', {source: qqSource?.name, path: qqPath, processes: data.processes.qq.length}),
+      setupPlatformCard('微信', {source: wxSource?.name, path: wxPaths?.database_dir, processes: data.processes.wechat.length}),
+    );
+    $('#setup-wechat-path').textContent = wxPaths?.database_dir || '未找到';
+  } catch (error) {
+    box.textContent = error.message;
+  }
+}
+
+async function openGroupSetup() {
+  $('#setup-mask').classList.remove('hidden');
+  $('#setup').classList.remove('hidden');
+  setupState.groups = [];
+  setupState.sourcesOk = [];
+  $('#setup-consent').checked = false;
+  $('#setup-auth-status').classList.add('hidden');
+  setupStep(1);
+  await scanSources();
+}
+
+function closeGroupSetup() {
+  $('#setup-mask').classList.add('hidden');
+  $('#setup').classList.add('hidden');
+}
+
+async function authorizeSources() {
+  if (!$('#setup-consent').checked) {
+    toast('请先勾选授权说明');
+    return;
+  }
+  const button = $('#setup-authorize');
+  button.disabled = true;
+  const status = $('#setup-auth-status');
+  status.className = 'setup-status';
+  status.textContent = '正在配置来源并获取本机凭据…';
+  status.classList.remove('hidden');
+  try {
+    const platforms = [];
+    const data = setupState.data || {};
+    const qqReady = (data.sources || []).some((item) => item.platform === 'qq')
+      || (data.candidates?.qq || []).length > 0;
+    const wxReady = Boolean(setupState.wechatPaths)
+      || (data.sources || []).some((item) => item.platform === 'wechat');
+    if (qqReady) platforms.push('qq');
+    if (wxReady) platforms.push('wechat');
+    if (!platforms.length) throw new Error('未找到可识别的聊天数据目录');
+    const paths = {};
+    if (setupState.wechatPaths) paths.wechat = setupState.wechatPaths;
+    const result = await api('/setup/authorize', {
+      method: 'POST',
+      body: JSON.stringify({platforms, confirmed: true, paths}),
+    });
+    const failures = [];
+    setupState.sourcesOk = [];
+    for (const [platform, value] of Object.entries(result.results || {})) {
+      if (value.ok) setupState.sourcesOk.push(value.source_id);
+      else failures.push(`${platform === 'qq' ? 'QQ' : '微信'}：${value.error}`);
+    }
+    if (!setupState.sourcesOk.length) throw new Error(failures.join('；') || '授权失败');
+    status.textContent = '凭据已就绪，正在读取群列表…' + (failures.length ? `（${failures.join('；')}）` : '');
+    const groups = [];
+    for (const sourceId of setupState.sourcesOk) {
+      const dataGroups = await api('/setup/groups?source_id=' + encodeURIComponent(sourceId));
+      groups.push(...(dataGroups.groups || []));
+    }
+    if (!groups.length) throw new Error('没有读取到群聊，请确认账号和目录');
+    for (const group of groups) group._selected = Boolean(group.enabled);
+    setupState.groups = groups;
+    renderSetupGroups();
+    setupStep(3);
+  } catch (error) {
+    status.classList.add('error');
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setupVisibleGroups() {
+  const query = $('#setup-search').value.trim().toLowerCase();
+  return setupState.groups.filter((group) =>
+    !query || group.name.toLowerCase().includes(query) || group.group_id.includes(query));
+}
+
+function renderSetupGroups() {
+  const list = $('#setup-groups');
+  list.innerHTML = '';
+  const visible = setupVisibleGroups();
+  for (const group of visible) {
+    const row = document.createElement('label');
+    row.className = 'setup-group';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = Boolean(group._selected);
+    input.dataset.key = group.source_id + '/' + group.group_id;
+    input.addEventListener('change', () => {
+      group._selected = input.checked;
+    });
+    const main = document.createElement('span');
+    main.className = 'setup-group-main';
+    const name = document.createElement('span');
+    name.className = 'setup-group-name';
+    name.textContent = group.name;
+    const meta = document.createElement('span');
+    meta.className = 'setup-group-meta';
+    meta.textContent = `${group.platform === 'qq' ? 'QQ' : '微信'} · ${group.group_id}`;
+    main.append(name, meta);
+    const badge = document.createElement('span');
+    badge.className = 'setup-badge' + (group.enabled ? ' enabled' : '');
+    badge.textContent = group.configured ? (group.enabled ? '已启用' : '已停用') : '未标定';
+    row.append(input, main, badge);
+    list.append(row);
+  }
+  $('#setup-group-count').textContent = `${visible.length} / ${setupState.groups.length} 个群`;
+  const visibleBoxes = [...list.querySelectorAll('input[type=checkbox]')];
+  $('#setup-check-all').checked = visibleBoxes.length > 0 && visibleBoxes.every((box) => box.checked);
+}
+
+async function saveSetupGroups() {
+  const button = $('#setup-save-groups');
+  button.disabled = true;
+  try {
+    const updates = setupState.groups.map((group) => ({
+      source_id: group.source_id,
+      group_id: group.group_id,
+      name: group.name,
+      enabled: Boolean(group._selected),
+    }));
+    await api('/setup/groups', {
+      method: 'POST',
+      body: JSON.stringify({groups: updates}),
+    });
+    toast('群聊标定已保存');
+    await refreshGroupSummary();
+    setupStep(4);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function refreshGroupSummary() {
+  try {
+    const data = await api('/setup/status');
+    $('#group-summary').textContent =
+      `已启用 ${data.configured_groups} 个群 · 共 ${data.total_groups} 个`;
+  } catch { /* keep previous */ }
+}
+
+/* ---------- manual sync ---------- */
+
+const syncState = { batch: '', items: [], selected: new Set(), busy: false };
+
+function syncVisibleItems() {
+  return syncState.items.filter((item) => !$('#sync-likely').checked || item.likely);
+}
+
+function syncUpdateSummary() {
+  const visible = syncVisibleItems().length;
+  const selected = syncState.selected.size;
+  $('#sync-summary').textContent = `共 ${syncState.items.length} 条 · 当前 ${visible} 条 · 已选 ${selected} 条`;
+  const visibleBoxes = [...document.querySelectorAll('#sync-list input[data-key]')];
+  $('#sync-all').checked = visibleBoxes.length > 0 && visibleBoxes.every((box) => box.checked);
+}
+
+function renderSyncList() {
+  const list = $('#sync-list');
+  list.innerHTML = '';
+  const visible = syncVisibleItems();
+  if (!visible.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sync-empty';
+    empty.textContent = syncState.items.length
+      ? '没有“可能相关”的消息，取消勾选“只看可能相关”可查看全部。'
+      : '没有读取到新消息。';
+    list.append(empty);
+  }
+  for (const item of visible) {
+    const row = document.createElement('label');
+    row.className = 'sync-item';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.dataset.key = item.message_key;
+    box.checked = syncState.selected.has(item.message_key);
+    box.addEventListener('change', () => {
+      if (box.checked) syncState.selected.add(item.message_key);
+      else syncState.selected.delete(item.message_key);
+      syncUpdateSummary();
+    });
+    const main = document.createElement('span');
+    main.className = 'sync-item-main';
+    const meta = document.createElement('span');
+    meta.className = 'sync-meta';
+    meta.textContent = [item.group, item.time.slice(5, 16), item.sender].filter(Boolean).join(' · ');
+    const text = document.createElement('span');
+    text.className = 'sync-text';
+    text.textContent = item.text || '[无文本消息]';
+    text.title = item.text || '';
+    main.append(meta, text);
+    if (item.reasons.length) {
+      const reasons = document.createElement('span');
+      reasons.className = 'sync-reasons';
+      reasons.textContent = item.reasons.join(' · ');
+      main.append(reasons);
+    }
+    row.append(box, main);
+    list.append(row);
+  }
+  syncUpdateSummary();
+}
+
+async function syncGroupKeys() {
+  const scope = $('#sync-scope').value;
+  if (!syncGroupKeys._cache) {
+    syncGroupKeys._cache = (await api('/groups')).groups || [];
+  }
+  return syncGroupKeys._cache
+    .filter((group) => group.enabled && (scope === 'all' || group.platform === scope))
+    .map((group) => group.key);
+}
+
+async function readSync() {
+  if (syncState.busy) return;
+  syncState.busy = true;
+  const list = $('#sync-list');
+  list.innerHTML = '<div class="sync-empty">正在本地读取群消息…</div>';
+  $('#sync-summary').textContent = '';
+  try {
+    const groupKeys = await syncGroupKeys();
+    if (!groupKeys.length) throw new Error('没有已启用的群，请先完成群聊标定');
+    const data = await api('/sync/read', {
+      method: 'POST',
+      body: JSON.stringify({group_keys: groupKeys,
+        since_days: Number($('#sync-range').value), limit: 50}),
+    });
+    syncState.batch = data.batch_id;
+    syncState.items = data.items || [];
+    syncState.selected.clear();
+    renderSyncList();
+    if (data.truncated) toast('消息较多，已显示最近一批；可继续读取或缩短时间范围');
+  } catch (error) {
+    list.innerHTML = '';
+    const empty = document.createElement('div');
+    empty.className = 'sync-empty';
+    empty.textContent = error.message;
+    list.append(empty);
+    toast(error.message);
+  } finally {
+    syncState.busy = false;
+  }
+}
+
+function openSync() {
+  $('#sync-mask').classList.remove('hidden');
+  $('#sync-modal').classList.remove('hidden');
+  syncState.items = [];
+  syncState.selected.clear();
+  syncState.batch = '';
+  const list = $('#sync-list');
+  list.innerHTML = '<div class="sync-empty">选择范围和时间后，点击“读取”获取群消息。微信首次读取可能较慢。</div>';
+  $('#sync-summary').textContent = '';
+}
+
+function closeSync() {
+  $('#sync-mask').classList.add('hidden');
+  $('#sync-modal').classList.add('hidden');
+}
+
+async function syncCommit(items, mode) {
+  if (!items.length) { toast('请先勾选消息'); return; }
+  if (syncState.busy) return;
+  syncState.busy = true;
+  try {
+    const payload = items.map((item) => ({
+      message_key: item.message_key,
+      content_hash: item.content_hash,
+      action: 'create',
+      text: item.text,
+      group: item.group,
+      time: item.time,
+    }));
+    const data = await api('/sync/commit', {
+      method: 'POST',
+      body: JSON.stringify({batch_id: syncState.batch, items: payload, mode}),
+    });
+    if (data.has_failures) throw new Error('部分消息写入失败，已保留待重试');
+    const keys = new Set(items.map((item) => item.message_key));
+    syncState.items = syncState.items.filter((item) => !keys.has(item.message_key));
+    keys.forEach((key) => syncState.selected.delete(key));
+    renderSyncList();
+    toast(`已生成 ${data.created} 条待办`);
+    await syncTasks();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    syncState.busy = false;
+  }
+}
+
+async function syncIgnore(items) {
+  if (!items.length) { toast('请先勾选消息'); return; }
+  if (syncState.busy) return;
+  syncState.busy = true;
+  try {
+    const payload = items.map((item) => ({
+      message_key: item.message_key,
+      content_hash: item.content_hash,
+      action: 'ignore',
+    }));
+    await api('/sync/commit', {
+      method: 'POST',
+      body: JSON.stringify({batch_id: syncState.batch, items: payload, mode: 'plain'}),
+    });
+    const keys = new Set(items.map((item) => item.message_key));
+    syncState.items = syncState.items.filter((item) => !keys.has(item.message_key));
+    keys.forEach((key) => syncState.selected.delete(key));
+    renderSyncList();
+    toast('已忽略并标记处理');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    syncState.busy = false;
+  }
+}
+
 /* ---------- pairing ---------- */
 
 let pairMode = 'lan';
@@ -788,6 +1159,7 @@ async function loadSettings() {
     $('#s-api-key').placeholder = data.api_key_set ? '已保存，留空不修改' : 'sk-…';
     pendingClearKey = false;
     updateAutoStatus(data);
+    refreshGroupSummary();
   } catch (error) {
     toast(error.message);
   }
@@ -1191,6 +1563,76 @@ $('#settings-cancel').addEventListener('click', closeSettings);
 $('#settings-mask').addEventListener('click', closeSettings);
 $('#settings-save').addEventListener('click', saveSettings);
 $('#btn-run-now').addEventListener('click', runAutomationNow);
+$('#btn-group-setup').addEventListener('click', openGroupSetup);
+$('#btn-sync').addEventListener('click', openSync);
+$('#btn-sync-settings').addEventListener('click', openSync);
+
+$('#setup-close').addEventListener('click', closeGroupSetup);
+$('#setup-mask').addEventListener('click', closeGroupSetup);
+$('#setup-rescan').addEventListener('click', scanSources);
+$('#setup-next-1').addEventListener('click', () => setupStep(2));
+$('#setup-back-2').addEventListener('click', () => setupStep(1));
+$('#setup-back-3').addEventListener('click', () => setupStep(2));
+$('#setup-authorize').addEventListener('click', authorizeSources);
+$('#setup-pick-wechat').addEventListener('click', async () => {
+  try {
+    const data = await api('/setup/folder', {method: 'POST', body: JSON.stringify({platform: 'wechat'})});
+    setupState.wechatPaths = data.paths;
+    $('#setup-wechat-path').textContent = data.paths.database_dir;
+  } catch (error) {
+    toast(error.message);
+  }
+});
+$('#setup-search').addEventListener('input', renderSetupGroups);
+$('#setup-check-all').addEventListener('change', (event) => {
+  for (const group of setupVisibleGroups()) group._selected = event.target.checked;
+  renderSetupGroups();
+});
+$('#setup-save-groups').addEventListener('click', saveSetupGroups);
+$('#setup-skip-key').addEventListener('click', () => {
+  closeGroupSetup();
+  toast('群聊已保存，可手动读取群消息');
+});
+$('#setup-go-key').addEventListener('click', () => {
+  closeGroupSetup();
+  setTimeout(() => {
+    const section = document.querySelector('.ai-section');
+    if (section) section.scrollIntoView({block: 'start'});
+    const key = $('#s-api-key');
+    if (key) key.focus();
+  }, 100);
+});
+
+$('#sync-close').addEventListener('click', closeSync);
+$('#sync-mask').addEventListener('click', closeSync);
+$('#sync-refresh').addEventListener('click', readSync);
+$('#sync-range').addEventListener('change', () => {
+  $('#sync-list').innerHTML = '<div class="sync-empty">时间范围已更改，点击“读取”获取消息。</div>';
+});
+$('#sync-scope').addEventListener('change', () => {
+  syncGroupKeys._cache = null;
+  $('#sync-list').innerHTML = '<div class="sync-empty">读取范围已更改，点击“读取”获取消息。</div>';
+});
+$('#sync-likely').addEventListener('change', renderSyncList);
+$('#sync-all').addEventListener('change', (event) => {
+  for (const item of syncVisibleItems()) {
+    if (event.target.checked) syncState.selected.add(item.message_key);
+    else syncState.selected.delete(item.message_key);
+  }
+  renderSyncList();
+});
+$('#sync-create').addEventListener('click', () => {
+  syncCommit(syncState.items.filter((item) => syncState.selected.has(item.message_key)), 'plain');
+});
+$('#sync-rules').addEventListener('click', () => {
+  syncCommit(syncState.items.filter((item) => syncState.selected.has(item.message_key)), 'rules');
+});
+$('#sync-ignore').addEventListener('click', () => {
+  syncIgnore(syncState.items.filter((item) => syncState.selected.has(item.message_key)));
+});
+$('#sync-ignore-rest').addEventListener('click', () => {
+  syncIgnore(syncState.items.filter((item) => !syncState.selected.has(item.message_key)));
+});
 $('#btn-clear-key').addEventListener('click', () => {
   pendingClearKey = true;
   $('#s-api-key').value = '';
@@ -1208,6 +1650,8 @@ document.addEventListener('keydown', (event) => {
     closeCompleted();
     closePairing();
     closeSettings();
+    closeGroupSetup();
+    closeSync();
     closeLightbox();
     $('#filter-pop').classList.add('hidden');
   }

@@ -12,6 +12,7 @@ import json
 import re
 import secrets
 import socket
+import subprocess
 import threading
 import time
 import uuid
@@ -29,7 +30,7 @@ from pydantic import BaseModel
 from project_core import project_path
 from todo_store import TodoStore
 
-from . import automation
+from . import automation, manual_sync, setup_groups
 from .scheduler import scheduler
 from .tunnel import tunnel
 
@@ -40,6 +41,7 @@ RATE_LIMIT = 120
 AUTH_FAILURE_LIMIT = 10
 _RATE_LOCK = threading.Lock()
 _RATE_WINDOWS: dict[tuple[str, str], deque] = defaultdict(deque)
+_SYNC_LOCK = threading.Lock()
 
 
 def _client_ip(request: Request) -> str:
@@ -159,6 +161,48 @@ class ClearCompleted(BaseModel):
 
 class TunnelToggle(BaseModel):
     enabled: bool
+
+
+class SetupAuthorize(BaseModel):
+    platforms: list[str]
+    confirmed: bool = False
+    paths: dict = {}
+
+
+class GroupUpdate(BaseModel):
+    source_id: str
+    group_id: str
+    name: str = ''
+    enabled: bool = False
+
+
+class GroupsSave(BaseModel):
+    groups: list[GroupUpdate]
+
+
+class FolderRequest(BaseModel):
+    platform: str = 'wechat'
+
+
+class SyncRead(BaseModel):
+    group_keys: list[str] = []
+    limit: int = 50
+    since_days: int = 1
+
+
+class SyncItem(BaseModel):
+    message_key: str
+    content_hash: str
+    action: str = 'create'
+    text: str = ''
+    group: str = ''
+    time: str = ''
+
+
+class SyncCommit(BaseModel):
+    batch_id: str
+    items: list[SyncItem]
+    mode: str = 'plain'
 
 
 class AutomationSettings(BaseModel):
@@ -377,6 +421,89 @@ def create_app() -> FastAPI:
         if not scheduler.request_manual_run():
             raise HTTPException(409, '已有读取在进行')
         return {'ok': True, 'started': True}
+
+    @app.get('/api/setup/status')
+    def setup_status(request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可查看标定')
+        return {'ok': True, **setup_groups.status()}
+
+    @app.get('/api/setup/scan')
+    def setup_scan(request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可识别群聊')
+        try:
+            return {'ok': True, **setup_groups.scan()}
+        except (RuntimeError, OSError, ValueError) as error:
+            raise HTTPException(500, str(error))
+
+    @app.post('/api/setup/authorize')
+    def setup_authorize(body: SetupAuthorize, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可识别群聊')
+        platforms = [item for item in body.platforms if item in ('qq', 'wechat')]
+        try:
+            result = setup_groups.authorize(platforms, body.paths, body.confirmed)
+        except (RuntimeError, OSError, ValueError) as error:
+            raise HTTPException(400, str(error))
+        return {'ok': True, 'results': result}
+
+    @app.get('/api/setup/groups')
+    def setup_group_list(source_id: str, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可识别群聊')
+        try:
+            return {'ok': True, 'groups': setup_groups.list_groups(source_id)}
+        except (RuntimeError, OSError, ValueError) as error:
+            raise HTTPException(400, str(error))
+
+    @app.post('/api/setup/groups')
+    def setup_save_groups(body: GroupsSave, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可修改标定')
+        try:
+            result = setup_groups.save_groups([item.model_dump() for item in body.groups])
+        except (RuntimeError, OSError, ValueError) as error:
+            raise HTTPException(400, str(error))
+        return {'ok': True, **result}
+
+    @app.post('/api/setup/folder')
+    def setup_folder(body: FolderRequest, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可选择目录')
+        if body.platform != 'wechat':
+            raise HTTPException(400, '目前只支持选择微信目录')
+        try:
+            return {'ok': True, 'paths': setup_groups.pick_wechat_folder()}
+        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+            raise HTTPException(400, str(error))
+
+    @app.post('/api/sync/read')
+    def sync_read(body: SyncRead, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可读取群消息')
+        if scheduler.busy():
+            raise HTTPException(409, '自动读取正在进行，请稍后再试')
+        if not _SYNC_LOCK.acquire(blocking=False):
+            raise HTTPException(409, '已有手动读取在进行')
+        try:
+            result = manual_sync.read_new(body.group_keys, body.limit, body.since_days)
+        except (RuntimeError, OSError, ValueError) as error:
+            raise HTTPException(400, str(error))
+        finally:
+            _SYNC_LOCK.release()
+        return {'ok': True, **result}
+
+    @app.post('/api/sync/commit')
+    def sync_commit(body: SyncCommit, request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可修改待办')
+        try:
+            result = manual_sync.commit(
+                body.batch_id, [item.model_dump() for item in body.items], body.mode)
+        except (RuntimeError, OSError, ValueError) as error:
+            raise HTTPException(400, str(error))
+        return {'ok': True, **result}
 
     @app.post('/api/pairing/tunnel')
     def toggle_tunnel(body: TunnelToggle, request: Request):

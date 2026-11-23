@@ -144,6 +144,9 @@
       <button id="btn-filter" class="wb-filter" aria-label="筛选" title="筛选">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>
       </button>
+      <button id="btn-sync" class="wb-filter" aria-label="读取群消息" title="读取群消息">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>
+      </button>
       <div class="wb-tools">
         <button id="btn-add" class="round-btn small accent" aria-label="新建任务" title="新建任务">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -328,6 +331,18 @@
     </section>
 
     <section class="settings-section">
+      <h4>群聊与同步</h4>
+      <p class="settings-desc">识别本人 QQ/微信群聊，并选择需要读取的群。</p>
+      <div class="settings-row">
+        <span class="settings-key">群聊标定<small id="group-summary">加载中…</small></span>
+        <div class="settings-actions">
+          <button id="btn-group-setup" class="ghost-btn small-btn" type="button">识别群聊</button>
+          <button id="btn-sync-settings" class="ghost-btn small-btn" type="button">读取群消息</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h4>启动</h4>
       <label class="settings-row switch-row">
         <span class="settings-key">开机自启<small>登录 Windows 后自动运行 ChatNotice</small></span>
@@ -338,7 +353,7 @@
       </label>
     </section>
 
-    <section class="settings-section">
+    <section class="settings-section ai-section">
       <h4>AI 进阶设置</h4>
       <p class="settings-desc">仅用于生成待办；密钥使用 Windows DPAPI 加密保存在本机。</p>
       <div class="settings-row">
@@ -357,7 +372,7 @@
       </label>
       <label class="settings-row">
         <span class="settings-key">每日调用上限<small>达到后只读取，不再调用模型</small></span>
-        <input id="s-call-limit" class="number-input" type="number" min="1" max="96" value="20">
+        <input id="s-call-limit" class="number-input" type="number" min="1" max="99999" value="20">
       </label>
     </section>
   </div>
@@ -365,6 +380,125 @@
     <span class="settings-version">ChatNotice v2.1.0-dev</span>
     <button id="settings-cancel" class="ghost-btn">取消</button>
     <button id="settings-save" class="primary-btn">保存</button>
+  </div>
+</div>
+
+<div id="setup-mask" class="mask hidden"></div>
+<div id="setup" class="modal setup-modal hidden">
+  <div class="settings-head">
+    <h3>群聊标定</h3>
+    <button id="setup-close" class="round-btn small" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="setup-body">
+    <div class="setup-steps">
+      <span data-step="1" class="active">1 检测</span>
+      <span data-step="2">2 授权</span>
+      <span data-step="3">3 选择群</span>
+      <span data-step="4">4 完成</span>
+    </div>
+
+    <div id="setup-step-1" class="setup-step">
+      <p class="setup-desc">自动查找本机 QQ/微信的数据目录和已登录客户端。只读取路径和进程信息，暂不读取聊天内容。</p>
+      <div id="setup-detect" class="setup-detect">检测中…</div>
+      <div class="setup-foot">
+        <button id="setup-rescan" class="ghost-btn">重新检测</button>
+        <button id="setup-next-1" class="primary-btn">下一步</button>
+      </div>
+    </div>
+
+    <div id="setup-step-2" class="setup-step hidden">
+      <p class="setup-desc">列出群名需要解密本地聊天数据库。下面这一步会在你明确同意后，一次性读取本人正在登录的 QQ/微信客户端内存中的数据库凭据；不读取聊天正文，不保存密码，授权仅本次生效。</p>
+      <div id="setup-paths" class="setup-paths"></div>
+      <div id="setup-wechat-row" class="setup-path-row">
+        <span class="settings-key">微信数据目录<small id="setup-wechat-path">未找到</small></span>
+        <button id="setup-pick-wechat" class="ghost-btn small-btn" type="button">选择文件夹</button>
+      </div>
+      <label class="check-row setup-consent">
+        <input id="setup-consent" type="checkbox">
+        我已知晓并允许一次性读取本人客户端内存中的数据库凭据
+      </label>
+      <div id="setup-auth-status" class="setup-status hidden"></div>
+      <div class="setup-foot">
+        <button id="setup-back-2" class="ghost-btn">上一步</button>
+        <button id="setup-authorize" class="primary-btn">允许并识别</button>
+      </div>
+    </div>
+
+    <div id="setup-step-3" class="setup-step hidden">
+      <div class="setup-toolbar">
+        <input id="setup-search" class="setup-search" placeholder="搜索群名或群号">
+        <label class="check-row"><input id="setup-check-all" type="checkbox"> 全选当前</label>
+        <span id="setup-group-count" class="setup-count"></span>
+      </div>
+      <div id="setup-groups" class="setup-groups"></div>
+      <div class="setup-foot">
+        <button id="setup-back-3" class="ghost-btn">上一步</button>
+        <button id="setup-save-groups" class="primary-btn">保存标定</button>
+      </div>
+    </div>
+
+    <div id="setup-step-4" class="setup-step hidden">
+      <p class="setup-desc">群聊已保存。接下来你可以选择是否接入 DeepSeek。</p>
+      <div class="setup-compare">
+        <div class="setup-compare-col">
+          <h4>不填 Key</h4>
+          <ul>
+            <li>手动点击“读取群消息”</li>
+            <li>本地规则初筛，免费</li>
+            <li>人工勾选后生成待办</li>
+            <li>图片不识别</li>
+          </ul>
+        </div>
+        <div class="setup-compare-col accent">
+          <h4>填写 Key</h4>
+          <ul>
+            <li>自动定时读取</li>
+            <li>AI 理解日期、链接、地点</li>
+            <li>自动生成待办</li>
+            <li>正文发送给 DeepSeek，按量计费</li>
+          </ul>
+        </div>
+      </div>
+      <div class="setup-foot">
+        <button id="setup-skip-key" class="ghost-btn">暂不填写，使用手动读取</button>
+        <button id="setup-go-key" class="primary-btn">去填写 Key</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="sync-mask" class="mask hidden"></div>
+<div id="sync-modal" class="modal sync-modal hidden">
+  <div class="settings-head">
+    <h3>读取群消息</h3>
+    <button id="sync-close" class="round-btn small" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="sync-toolbar">
+    <select id="sync-scope">
+      <option value="all">全部标定群</option>
+      <option value="qq">仅 QQ 群</option>
+      <option value="wechat">仅微信群（首次较慢）</option>
+    </select>
+    <select id="sync-range">
+      <option value="1">最近 1 天</option>
+      <option value="3">最近 3 天</option>
+      <option value="7">最近 7 天</option>
+    </select>
+    <label class="check-row"><input id="sync-likely" type="checkbox" checked> 只看可能相关</label>
+    <label class="check-row"><input id="sync-all" type="checkbox"> 全选当前</label>
+    <span id="sync-summary" class="setup-count"></span>
+    <button id="sync-refresh" class="ghost-btn small-btn" type="button">读取</button>
+  </div>
+  <div id="sync-list" class="sync-list"></div>
+  <div class="sync-foot">
+    <button id="sync-create" class="primary-btn">生成待办</button>
+    <button id="sync-rules" class="ghost-btn">按规则生成</button>
+    <button id="sync-ignore" class="danger-ghost">忽略选中</button>
+    <button id="sync-ignore-rest" class="ghost-btn">忽略未选</button>
   </div>
 </div>
 

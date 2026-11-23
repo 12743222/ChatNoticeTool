@@ -86,8 +86,8 @@ def validate_config(values: dict) -> dict:
     if not MODEL_RE.fullmatch(model):
         raise ValueError('模型名不合法')
     limit = values.get('daily_model_call_limit')
-    if type(limit) is not int or not 1 <= limit <= 96:
-        raise ValueError('每日模型调用上限需在 1 到 96 次之间')
+    if type(limit) is not int or not 1 <= limit <= 99999:
+        raise ValueError('每日模型调用上限需在 1 到 99999 次之间')
     return {
         'window_start': start,
         'window_end': end,
