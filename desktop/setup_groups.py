@@ -155,12 +155,25 @@ def _source_for(platform: str, config: dict) -> dict | None:
     return None
 
 
-def _check(source_id: str) -> str:
+def _check(source_id: str) -> tuple[str, str]:
     try:
         data = _run(['source', 'check', '--source', source_id])
-        return str(data.get('status') or '')
-    except RuntimeError:
-        return ''
+        return str(data.get('status') or ''), ''
+    except RuntimeError as error:
+        return '', str(error)
+
+
+def _credential_error(text: str) -> bool:
+    value = (text or '').lower()
+    return any(word in value for word in ('凭据', '不可解封', 'dpapi', '密钥', 'key'))
+
+
+def _reset_chat_secrets() -> None:
+    for rel in ('state/secrets.dpapi', 'state/secrets.dpapi.tmp', 'state/secrets.lock'):
+        try:
+            project_path(rel).unlink()
+        except (FileNotFoundError, OSError):
+            pass
 
 
 def _connect(source_id: str, pids: list[int]) -> None:
@@ -199,15 +212,25 @@ def _configure_source(platform: str, wanted: dict, config: dict) -> str:
 
 
 def _ensure_ready(platform: str, source_id: str) -> None:
-    status = _check(source_id)
+    status, error = _check(source_id)
     if status == 'ready':
         return
     pids = _pids(QQ_NAMES if platform == 'qq' else WECHAT_NAMES)
     if not pids:
         raise RuntimeError('未检测到已登录的客户端进程，请打开并登录后重试')
-    _connect(source_id, pids)
-    if _check(source_id) != 'ready':
-        raise RuntimeError('凭据仍未就绪，请确认客户端已登录且与 ChatNotice 权限一致')
+    if error and _credential_error(error):
+        _reset_chat_secrets()
+    try:
+        _connect(source_id, pids)
+    except RuntimeError as connect_error:
+        if _credential_error(str(connect_error)):
+            _reset_chat_secrets()
+            _connect(source_id, pids)
+        else:
+            raise
+    status, error = _check(source_id)
+    if status != 'ready':
+        raise RuntimeError(error or '凭据仍未就绪，请确认客户端已登录且与 ChatNotice 权限一致')
 
 
 def _wanted_paths(platform: str, supplied: dict, source: dict | None) -> dict:
