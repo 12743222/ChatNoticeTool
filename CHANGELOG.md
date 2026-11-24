@@ -1,5 +1,12 @@
 # 变更记录
 
+## v2.1.1-dev — 便携包修复
+
+- 便携包补回 `config.example.json` 与 `requirements.txt`，修复 `agent_locator.py` 在他人电脑上返回 `component_location_required`、`local_setup.py` 报 `FileNotFoundError` 的问题。
+- 便携 runtime 补入 tkinter（`_tkinter.pyd`、Tcl/Tk 运行库与 `Lib/tkinter`），恢复待办小组件、规则编辑、群设置和待办详情等 Tk 工具。
+- 修复端口探测使用 `127.0.0.1` 而服务实际绑定 `0.0.0.0` 的误判：当首选端口被其他程序占用时，旧逻辑可能绑定失败并静默连到另一个实例；现在按实际绑定地址探测。
+- 打包脚本新增 tkinter 安装步骤，后续构建会自动包含，不再依赖人工补文件。
+
 ## 未发布 — 简化入口与用户规则
 
 - 合入 @ouzefeng113 在 [issue #2](https://github.com/Jinshi-Liu/ChatNoticeTool/issues/2) 贡献的“清空已完成”：确认快照批量软移除、草稿保护与原子回滚测试，并适配现有顶部布局。

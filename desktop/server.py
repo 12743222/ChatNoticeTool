@@ -34,7 +34,7 @@ from . import automation, manual_sync, setup_groups
 from .scheduler import scheduler
 from .tunnel import tunnel
 
-APP_VERSION = '2.1.0-dev'
+APP_VERSION = '2.1.1-dev'
 UI_DIR = Path(__file__).resolve().parent / 'ui'
 VIRTUAL_NETWORKS = [ipaddress.ip_network('198.18.0.0/15')]
 RATE_LIMIT = 120

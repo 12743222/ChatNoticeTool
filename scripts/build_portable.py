@@ -13,7 +13,7 @@ BUILD = DIST / 'portable_build'
 APP = BUILD / 'ChatNotice'
 EMBED_ZIP = BUILD / 'python-embed.zip'
 SITE = ROOT / '.venv' / 'Lib' / 'site-packages'
-OUTPUT = DIST / 'ChatNotice-portable-v2.1.0-dev-win64.zip'
+OUTPUT = DIST / 'ChatNotice-portable-v2.1.1-dev-win64.zip'
 
 APP_FILES = [
     'agent_assets.py', 'agent_cli.py', 'agent_config.py', 'agent_imports.py',
@@ -24,12 +24,32 @@ APP_FILES = [
     'glass_style.py', 'group_settings.py', 'groups.py', 'local_setup.py',
     'memory_reader.py', 'messages.py', 'project_core.py', 'rules_editor.py',
     'todo_detail.py', 'todo_store.py', 'todo_widget.py', 'wechat_content.py',
-    'widget_ui.py',
+    'widget_ui.py', 'config.example.json', 'requirements.txt',
 ]
+
+TCL_DIRS = ('tcl8', 'tcl8.6', 'tk8.6', 'tix8.4.3', 'dde1.4', 'reg1.3')
 
 
 def ignore(_directory, names):
     return {name for name in names if name == '__pycache__' or name.endswith('.pyc')}
+
+
+def install_tkinter(app: Path) -> None:
+    """Copy the build Python's Tcl/Tk runtime into the embeddable distribution."""
+    base = Path(sys.base_prefix)
+    dlls = base / 'DLLs'
+    for name in ('_tkinter.pyd', 'tcl86t.dll', 'tk86t.dll', 'zlib1.dll'):
+        source = dlls / name
+        if not source.is_file():
+            raise SystemExit(f'缺少 {source}，请用带 tkinter 的 Python 3.12 构建')
+        shutil.copy2(source, app / 'runtime' / name)
+    shutil.copytree(base / 'Lib' / 'tkinter',
+                    app / 'runtime' / 'Lib' / 'site-packages' / 'tkinter',
+                    ignore=ignore)
+    for name in TCL_DIRS:
+        source = base / 'tcl' / name
+        if source.is_dir():
+            shutil.copytree(source, app / 'runtime' / 'tcl' / name, ignore=ignore)
 
 
 def main() -> None:
@@ -53,6 +73,7 @@ def main() -> None:
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
+    install_tkinter(APP)
     for name in APP_FILES:
         shutil.copy2(ROOT / name, APP / name)
     shutil.copytree(ROOT / 'desktop', APP / 'desktop', ignore=ignore)
@@ -71,15 +92,13 @@ def main() -> None:
     binary = ROOT / 'state' / 'tools' / 'cloudflared.exe'
     if binary.is_file():
         shutil.copy2(binary, tools / 'cloudflared.exe')
-    (APP / 'Start ChatNotice.bat').write_text(
-        '@echo off\r\ncd /d "%~dp0"\r\nstart "" "%~dp0runtime\\pythonw.exe" -B -X utf8 "%~dp0desktop_app.py"\r\nexit /b\r\n',
-        encoding='utf-8')
-    (APP / 'Start ChatNotice (debug console).bat').write_text(
-        '@echo off\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\python.exe" -B -X utf8 "%~dp0desktop_app.py"\r\npause\r\n',
-        encoding='utf-8')
+    with (APP / 'Start ChatNotice.bat').open('w', encoding='utf-8', newline='') as handle:
+        handle.write('@echo off\r\ncd /d "%~dp0"\r\nstart "" "%~dp0runtime\\pythonw.exe" -B -X utf8 "%~dp0desktop_app.py"\r\nexit /b\r\n')
+    with (APP / 'Start ChatNotice (debug console).bat').open('w', encoding='utf-8', newline='') as handle:
+        handle.write('@echo off\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\python.exe" -B -X utf8 "%~dp0desktop_app.py"\r\npause\r\n')
     result = subprocess.run(
         [str(APP / 'runtime' / 'python.exe'), '-c',
-         'import fastapi,uvicorn,webview,pystray,qrcode,PIL,cryptography,zstandard,pypdf,olefile; print("runtime ok")'],
+         'import fastapi,uvicorn,webview,pystray,qrcode,PIL,cryptography,zstandard,pypdf,olefile,tkinter,tkinter.ttk; print("runtime ok")'],
         cwd=APP, capture_output=True, text=True, encoding='utf-8', errors='replace')
     print(result.stdout.strip() or result.stderr.strip())
     if result.returncode != 0:

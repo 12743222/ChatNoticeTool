@@ -17,12 +17,12 @@ def free_port(preferred: int = 8760) -> int:
     for port in range(preferred, preferred + 50):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             try:
-                probe.bind(('127.0.0.1', port))
+                probe.bind((BIND_HOST, port))
             except OSError:
                 continue
             return port
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(('127.0.0.1', 0))
+        probe.bind((BIND_HOST, 0))
         return probe.getsockname()[1]
 
 
