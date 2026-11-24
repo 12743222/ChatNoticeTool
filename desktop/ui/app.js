@@ -712,7 +712,9 @@ async function scanSources() {
       setupPlatformCard('QQ', {source: qqSource?.name, path: qqPath, processes: data.processes.qq.length}),
       setupPlatformCard('微信', {source: wxSource?.name, path: wxPaths?.database_dir, processes: data.processes.wechat.length}),
     );
-    $('#setup-wechat-path').textContent = wxPaths?.database_dir || '未找到';
+    const wxCount = (data.candidates.wechat || []).length;
+    $('#setup-wechat-path').textContent =
+      (wxPaths?.database_dir || '未找到') + (wxCount > 1 ? '（检测到多个账号，请选择当前登录的账号）' : '');
   } catch (error) {
     box.textContent = error.message;
   }
@@ -765,7 +767,12 @@ async function authorizeSources() {
     setupState.sourcesOk = [];
     for (const [platform, value] of Object.entries(result.results || {})) {
       if (value.ok) setupState.sourcesOk.push(value.source_id);
-      else failures.push(`${platform === 'qq' ? 'QQ' : '微信'}：${value.error}`);
+      else {
+        const hint = /凭据|密钥|key|内存/i.test(value.error)
+          ? '（请确认客户端已登录，且 ChatNotice 与客户端权限级别一致）'
+          : '';
+        failures.push(`${platform === 'qq' ? 'QQ' : '微信'}：${value.error}${hint}`);
+      }
     }
     if (!setupState.sourcesOk.length) throw new Error(failures.join('；') || '授权失败');
     status.textContent = '凭据已就绪，正在读取群列表…' + (failures.length ? `（${failures.join('；')}）` : '');

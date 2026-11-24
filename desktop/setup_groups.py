@@ -100,6 +100,12 @@ def _wechat_candidates() -> list[dict]:
                 'paths': {'account_dir': str(account), 'database_dir': str(db)},
                 'validated': False,
             })
+    def modified(item):
+        try:
+            return (Path(item['paths']['database_dir']) / 'message' / 'message_0.db').stat().st_mtime
+        except OSError:
+            return 0
+    results.sort(key=modified, reverse=True)
     return results
 
 
@@ -158,11 +164,25 @@ def _check(source_id: str) -> str:
 
 
 def _connect(source_id: str, pids: list[int]) -> None:
-    args = ['source', 'connect', '--source', source_id]
+    def attempt(subset: list[int]) -> None:
+        args = ['source', 'connect', '--source', source_id]
+        for pid in subset:
+            args.extend(['--pid', str(pid)])
+        args.append('--authorize-memory-read')
+        _run(args, timeout=300)
+
+    try:
+        attempt(pids)
+        return
+    except RuntimeError as first_error:
+        last_error = first_error
     for pid in pids:
-        args.extend(['--pid', str(pid)])
-    args.append('--authorize-memory-read')
-    _run(args, timeout=300)
+        try:
+            attempt([pid])
+            return
+        except RuntimeError as error:
+            last_error = error
+    raise last_error
 
 
 def authorize(platforms: list[str], paths: dict, confirmed: bool) -> dict:
@@ -175,36 +195,39 @@ def authorize(platforms: list[str], paths: dict, confirmed: bool) -> dict:
         try:
             config = _config()
             source = _source_for(platform, config)
-            if source is None:
-                supplied = (paths or {}).get(platform) or {}
-                if platform == 'qq':
-                    if not supplied:
-                        candidates = _run(['source', 'candidates', '--platform', 'qq']).get('candidates', [])
-                        if not candidates:
-                            raise RuntimeError('没有找到 QQ 数据目录，请先登录 QQ 客户端')
-                        supplied = candidates[0].get('paths') or {}
-                    payload_paths = {'database_dir': supplied.get('database_dir', ''),
-                                     'media_dir': supplied.get('media_dir', '')}
-                    payload = {'expected_revision': config.get('revision', 0),
-                               'confirmed': True, 'platform': 'qq', 'name': '我的QQ',
-                               'paths': payload_paths}
-                else:
-                    if not supplied:
-                        candidates = _wechat_candidates()
-                        if not candidates:
-                            raise RuntimeError('没有找到微信数据目录，请选择 xwechat_files 下的账号文件夹')
-                        supplied = candidates[0].get('paths') or {}
-                    payload = {'expected_revision': config.get('revision', 0),
-                               'confirmed': True, 'platform': 'wechat', 'name': '我的微信',
-                               'paths': {'account_dir': supplied.get('account_dir', ''),
-                                         'database_dir': supplied.get('database_dir', '')}}
+            supplied = (paths or {}).get(platform) or {}
+            if platform == 'qq':
+                if not supplied and source:
+                    supplied = source.get('paths') or {}
+                if not supplied:
+                    candidates = _run(['source', 'candidates', '--platform', 'qq']).get('candidates', [])
+                    if not candidates:
+                        raise RuntimeError('没有找到 QQ 数据目录，请先登录 QQ 客户端')
+                    supplied = candidates[0].get('paths') or {}
+                wanted = {'database_dir': supplied.get('database_dir', ''),
+                          'media_dir': supplied.get('media_dir', '')}
+            else:
+                if not supplied and source:
+                    supplied = source.get('paths') or {}
+                if not supplied:
+                    candidates = _wechat_candidates()
+                    if not candidates:
+                        raise RuntimeError('没有找到微信数据目录，请选择 xwechat_files 下的账号文件夹')
+                    supplied = candidates[0].get('paths') or {}
+                wanted = {'account_dir': supplied.get('account_dir', ''),
+                          'database_dir': supplied.get('database_dir', '')}
+            same = source and all((source.get('paths') or {}).get(key) == value
+                                  for key, value in wanted.items() if value)
+            if not same:
+                payload = {'expected_revision': config.get('revision', 0),
+                           'confirmed': True, 'platform': platform,
+                           'name': '我的QQ' if platform == 'qq' else '我的微信',
+                           'paths': wanted}
                 data = _run(['source', 'configure', '--input', '-'], payload)
                 source = data.get('source') or {}
-                source_id = source.get('id')
-                if not source_id:
-                    raise RuntimeError('来源配置未返回来源 ID')
-            else:
-                source_id = source.get('id')
+            source_id = (source or {}).get('id')
+            if not source_id:
+                raise RuntimeError('来源配置未返回来源 ID')
             status = _check(source_id)
             if status != 'ready':
                 pids = _pids(QQ_NAMES if platform == 'qq' else WECHAT_NAMES)
