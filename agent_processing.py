@@ -204,10 +204,16 @@ class ProcessingStore:
             ordinal = 0
             windows_by_key = {w['group_key']: w for w in windows}
             for group in groups:
-                upper = windows_by_key[group['key']]['target_until']
+                window = windows_by_key[group['key']]
+                upper = window['target_until']
+                if window.get('queue_only'):
+                    lower = 0
+                else:
+                    lower = window['since']
+                    upper = window['until']
                 rows = db.execute('''SELECT * FROM messages WHERE group_key=? AND timestamp>=? AND timestamp<?
                                      AND (processed_hash IS NULL OR processed_hash!=content_hash)
-                                     ORDER BY timestamp,message_key''', (group['key'], 0, upper))
+                                     ORDER BY timestamp,message_key''', (group['key'], lower, upper))
                 for row in rows:
                     db.execute('INSERT INTO batch_messages(batch_id,ordinal,message_key,content_hash,payload) VALUES(?,?,?,?,?)',
                                (batch_id, ordinal, row['message_key'], row['content_hash'], row['payload']))

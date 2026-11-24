@@ -316,7 +316,9 @@ class AutomationScheduler:
             return {'ok': False, 'error': '已有读取在进行'}
         try:
             if not automation.acquire_lock():
-                return {'ok': False, 'error': '已有读取在进行（锁被占用）'}
+                automation.clear_stale_lock()
+                if not automation.acquire_lock():
+                    return {'ok': False, 'error': '已有读取在进行（锁被占用）'}
             try:
                 return self._run(manual)
             finally:
@@ -358,8 +360,21 @@ class AutomationScheduler:
         try:
             page = _agent_json(args, timeout=1800)
         except Exception as error:
-            self._record('error', error=f'读取失败：{error}')
-            return {'ok': False, 'error': f'读取失败：{error}'}
+            message = str(error)
+            if pending_batch and any(word in message for word in ('群未授权', '已停用', '已撤销')):
+                # The batch was opened before a group was disabled. Drop the stale
+                # cursor and read the currently enabled groups afresh.
+                automation.update_runtime(pending_batch=None, pending_cursor=None)
+                pending_batch = None
+                signature = source_signature()
+                try:
+                    page = _agent_json(['read', '--limit', '50'], timeout=1800)
+                except Exception as retry_error:
+                    self._record('error', error=f'读取失败：{retry_error}')
+                    return {'ok': False, 'error': f'读取失败：{retry_error}'}
+            else:
+                self._record('error', error=f'读取失败：{message}')
+                return {'ok': False, 'error': f'读取失败：{message}'}
         batch_id = page.get('batch_id')
         messages = page.get('messages') or []
         next_cursor = page.get('next_cursor')

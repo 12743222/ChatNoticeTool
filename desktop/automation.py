@@ -240,6 +240,49 @@ def ensure_auto_start() -> None:
         pass
 
 
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == 'nt':
+        import ctypes
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def force_clear_lock() -> bool:
+    try:
+        project_path(LOCK_REL).unlink()
+        return True
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def clear_stale_lock() -> bool:
+    path = project_path(LOCK_REL)
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+        pid = int(data.get('pid') or 0)
+    except (OSError, ValueError):
+        pid = 0
+    if pid and pid != os.getpid() and _pid_alive(pid):
+        return False
+    try:
+        path.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def lock_state() -> dict:
     path = project_path(LOCK_REL)
     if not path.is_file():

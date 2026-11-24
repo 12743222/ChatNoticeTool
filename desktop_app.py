@@ -43,12 +43,13 @@ def main() -> None:
     import uvicorn
     import webview
     from PIL import Image
-    from desktop.automation import ensure_auto_start
+    from desktop.automation import ensure_auto_start, force_clear_lock
     from desktop.scheduler import scheduler
     from desktop.server import create_app
     from desktop.tunnel import load_enabled, tunnel
 
     ensure_auto_start()
+    force_clear_lock()
     scheduler.start()
     port = free_port()
     tunnel.configure(port)

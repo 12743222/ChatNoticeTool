@@ -78,7 +78,7 @@ def read_new(group_keys: list[str] | None = None, limit: int = 50,
     since_dt = datetime.now(LOCAL_TZ) - timedelta(days=max(1, min(since_days, 7)))
     items = []
     pages = 0
-    while page is not None and pages < 12:
+    while page is not None and pages < 40:
         for wrapper in page.get('messages') or []:
             message = wrapper.get('message') or {}
             try:
