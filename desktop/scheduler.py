@@ -288,6 +288,8 @@ class AutomationScheduler:
         except ValueError:
             last = None
         interval = int(config.get('check_interval_seconds') or 60)
+        if config.get('pending_batch'):
+            interval = min(interval, 15)
         if last and (now - last).total_seconds() < interval:
             return
         automation.update_runtime(last_check_at=_iso_now())
