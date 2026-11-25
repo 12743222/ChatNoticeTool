@@ -346,8 +346,10 @@
         <div class="settings-actions">
           <button id="btn-group-setup" class="ghost-btn small-btn" type="button">识别群聊</button>
           <button id="btn-sync-settings" class="ghost-btn small-btn" type="button">读取群消息</button>
+          <button id="btn-diagnose" class="ghost-btn small-btn" type="button">导出诊断</button>
         </div>
       </div>
+      <p id="diagnose-status" class="settings-desc hidden"></p>
     </section>
 
     <section class="settings-section">
@@ -415,8 +417,10 @@
         <label class="check-row"><input id="setup-platform-wechat" type="checkbox" checked> 微信</label>
       </div>
       <div id="setup-detect" class="setup-detect">检测中…</div>
+      <div id="setup-diagnose-result" class="setup-status hidden"></div>
       <div class="setup-foot">
         <button id="setup-rescan" class="ghost-btn">重新检测</button>
+        <button id="setup-diagnose" class="ghost-btn">导出诊断</button>
         <button id="setup-next-1" class="primary-btn">下一步</button>
       </div>
     </div>

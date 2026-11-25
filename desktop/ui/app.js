@@ -1282,6 +1282,33 @@ async function saveSettings() {
   }
 }
 
+async function exportDiagnostics() {
+  const buttons = [$('#btn-diagnose'), $('#setup-diagnose')].filter(Boolean);
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const data = await api('/setup/diagnose', {method: 'POST', body: '{}'});
+    const message = '诊断已生成：' + data.path;
+    $('#diagnose-status').textContent = message;
+    $('#diagnose-status').classList.remove('hidden');
+    const setupStatus = $('#setup-diagnose-result');
+    if (setupStatus) {
+      setupStatus.className = 'setup-status';
+      setupStatus.textContent = message;
+      setupStatus.classList.remove('hidden');
+    }
+    try {
+      await navigator.clipboard.writeText(data.path);
+      toast('诊断文件已生成，路径已复制');
+    } catch {
+      toast(message);
+    }
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
 async function runAutomationNow() {
   if (!$('#s-api-key').value.trim() && $('#key-state').textContent !== '已保存') {
     toast('请先保存 DeepSeek API Key');
@@ -1629,6 +1656,8 @@ $('#btn-run-now').addEventListener('click', runAutomationNow);
 $('#btn-group-setup').addEventListener('click', openGroupSetup);
 $('#btn-sync').addEventListener('click', openSync);
 $('#btn-sync-settings').addEventListener('click', openSync);
+$('#btn-diagnose').addEventListener('click', exportDiagnostics);
+$('#setup-diagnose').addEventListener('click', exportDiagnostics);
 
 $('#setup-close').addEventListener('click', closeGroupSetup);
 $('#setup-mask').addEventListener('click', closeGroupSetup);

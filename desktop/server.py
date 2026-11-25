@@ -30,11 +30,11 @@ from pydantic import BaseModel
 from project_core import project_path
 from todo_store import TodoStore
 
-from . import automation, manual_sync, setup_groups
+from . import automation, diagnostics, manual_sync, setup_groups
 from .scheduler import scheduler
 from .tunnel import tunnel
 
-APP_VERSION = '2.1.4-dev'
+APP_VERSION = '2.1.5-dev'
 UI_DIR = Path(__file__).resolve().parent / 'ui'
 VIRTUAL_NETWORKS = [ipaddress.ip_network('198.18.0.0/15')]
 RATE_LIMIT = 120
@@ -422,6 +422,15 @@ def create_app() -> FastAPI:
         if not scheduler.request_manual_run():
             raise HTTPException(409, '已有读取在进行')
         return {'ok': True, 'started': True}
+
+    @app.post('/api/setup/diagnose')
+    def setup_diagnose(request: Request):
+        if not _is_trusted_local(request):
+            raise HTTPException(403, '仅本机可导出诊断')
+        try:
+            return {'ok': True, **diagnostics.run()}
+        except Exception as error:
+            raise HTTPException(500, str(error))
 
     @app.get('/api/setup/status')
     def setup_status(request: Request):
