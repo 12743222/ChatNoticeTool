@@ -1193,7 +1193,8 @@ async function refreshAutomationStatus() {
 
 async function loadSettings() {
   try {
-    const data = await api('/settings/automation');
+    const [data, status] = await Promise.all([api('/settings/automation'), api('/status')]);
+    $('#settings-version').textContent = 'ChatNotice v' + (status.version || '');
     $('#s-window-start').value = data.window_start;
     $('#s-window-end').value = data.window_end;
     $('#s-check-interval').value = String(data.check_interval_seconds);
