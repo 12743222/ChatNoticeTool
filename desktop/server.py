@@ -34,7 +34,7 @@ from . import automation, manual_sync, setup_groups
 from .scheduler import scheduler
 from .tunnel import tunnel
 
-APP_VERSION = '2.1.1-dev'
+APP_VERSION = '2.1.2-dev'
 UI_DIR = Path(__file__).resolve().parent / 'ui'
 VIRTUAL_NETWORKS = [ipaddress.ip_network('198.18.0.0/15')]
 RATE_LIMIT = 120
@@ -212,6 +212,7 @@ class AutomationSettings(BaseModel):
     min_read_interval_minutes: int
     model: str = 'deepseek-flash'
     daily_model_call_limit: int = 20
+    read_platform: str = 'all'
     auto_start: bool = False
     enabled: bool = False
     privacy_confirmed: bool = False

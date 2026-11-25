@@ -9,6 +9,7 @@ const state = {
   signature: null,
   syncSeq: 0,
   animating: false,
+  readPlatform: 'all',
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -720,12 +721,19 @@ async function scanSources() {
   }
 }
 
+function syncSetupPlatformUI() {
+  $('#setup-wechat-row').classList.toggle('hidden', !$('#setup-platform-wechat').checked);
+}
+
 async function openGroupSetup() {
   $('#setup-mask').classList.remove('hidden');
   $('#setup').classList.remove('hidden');
   setupState.groups = [];
   setupState.sourcesOk = [];
   $('#setup-consent').checked = false;
+  $('#setup-platform-qq').checked = true;
+  $('#setup-platform-wechat').checked = true;
+  syncSetupPlatformUI();
   $('#setup-auth-status').classList.add('hidden');
   setupStep(1);
   await scanSources();
@@ -749,16 +757,13 @@ async function authorizeSources() {
   status.classList.remove('hidden');
   try {
     const platforms = [];
-    const data = setupState.data || {};
-    const qqReady = (data.sources || []).some((item) => item.platform === 'qq')
-      || (data.candidates?.qq || []).length > 0;
-    const wxReady = Boolean(setupState.wechatPaths)
-      || (data.sources || []).some((item) => item.platform === 'wechat');
-    if (qqReady) platforms.push('qq');
-    if (wxReady) platforms.push('wechat');
-    if (!platforms.length) throw new Error('未找到可识别的聊天数据目录');
+    if ($('#setup-platform-qq').checked) platforms.push('qq');
+    if ($('#setup-platform-wechat').checked) platforms.push('wechat');
+    if (!platforms.length) throw new Error('请至少勾选 QQ 或微信');
     const paths = {};
-    if (setupState.wechatPaths) paths.wechat = setupState.wechatPaths;
+    if (platforms.includes('wechat') && setupState.wechatPaths) {
+      paths.wechat = setupState.wechatPaths;
+    }
     const result = await api('/setup/authorize', {
       method: 'POST',
       body: JSON.stringify({platforms, confirmed: true, paths}),
@@ -975,6 +980,7 @@ function openSync() {
   syncState.items = [];
   syncState.selected.clear();
   syncState.batch = '';
+  $('#sync-scope').value = state.readPlatform === 'all' ? 'all' : state.readPlatform;
   const list = $('#sync-list');
   list.innerHTML = '<div class="sync-empty">选择范围和时间后，点击“读取”获取群消息。微信首次读取可能较慢。</div>';
   $('#sync-summary').textContent = '';
@@ -1161,6 +1167,8 @@ async function loadSettings() {
     $('#s-privacy').checked = Boolean(data.privacy_confirmed);
     $('#s-model').value = data.model;
     $('#s-call-limit').value = data.daily_model_call_limit;
+    $('#s-read-platform').value = data.read_platform || 'all';
+    state.readPlatform = data.read_platform || 'all';
     $('#s-api-key').value = '';
     $('#key-state').textContent = data.api_key_set ? '已保存' : '未保存';
     $('#s-api-key').placeholder = data.api_key_set ? '已保存，留空不修改' : 'sk-…';
@@ -1209,6 +1217,7 @@ async function saveSettings() {
       privacy_confirmed: $('#s-privacy').checked,
       model: $('#s-model').value,
       daily_model_call_limit: Number($('#s-call-limit').value),
+      read_platform: $('#s-read-platform').value,
     };
     const apiKey = $('#s-api-key').value.trim();
     if (apiKey) body.api_key = apiKey;
@@ -1576,6 +1585,8 @@ $('#btn-sync-settings').addEventListener('click', openSync);
 
 $('#setup-close').addEventListener('click', closeGroupSetup);
 $('#setup-mask').addEventListener('click', closeGroupSetup);
+$('#setup-platform-qq').addEventListener('change', syncSetupPlatformUI);
+$('#setup-platform-wechat').addEventListener('change', syncSetupPlatformUI);
 $('#setup-rescan').addEventListener('click', scanSources);
 $('#setup-next-1').addEventListener('click', () => setupStep(2));
 $('#setup-back-2').addEventListener('click', () => setupStep(1));

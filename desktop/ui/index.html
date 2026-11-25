@@ -298,6 +298,14 @@
         <span id="auto-status-line">尚未运行</span>
         <button id="btn-run-now" class="ghost-btn small-btn" type="button">立即读取一次</button>
       </div>
+      <label class="settings-row">
+        <span class="settings-key">读取平台<small>排查时可只读 QQ 或只读微信</small></span>
+        <select id="s-read-platform">
+          <option value="all">QQ + 微信</option>
+          <option value="qq">仅 QQ</option>
+          <option value="wechat">仅微信</option>
+        </select>
+      </label>
       <div class="settings-row">
         <span class="settings-key">允许读取时间段</span>
         <div class="time-range">
@@ -401,6 +409,11 @@
 
     <div id="setup-step-1" class="setup-step">
       <p class="setup-desc">自动查找本机 QQ/微信的数据目录和已登录客户端。只读取路径和进程信息，暂不读取聊天内容。</p>
+      <div class="setup-platforms">
+        <span>本次接入：</span>
+        <label class="check-row"><input id="setup-platform-qq" type="checkbox" checked> QQ</label>
+        <label class="check-row"><input id="setup-platform-wechat" type="checkbox" checked> 微信</label>
+      </div>
       <div id="setup-detect" class="setup-detect">检测中…</div>
       <div class="setup-foot">
         <button id="setup-rescan" class="ghost-btn">重新检测</button>

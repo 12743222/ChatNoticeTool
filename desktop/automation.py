@@ -28,6 +28,7 @@ DEFAULTS = {
     'min_read_interval_minutes': 5,
     'model': 'deepseek-flash',
     'daily_model_call_limit': 20,
+    'read_platform': 'all',
     'privacy_confirmed': False,
     'pending_batch': None,
     'pending_cursor': None,
@@ -88,6 +89,9 @@ def validate_config(values: dict) -> dict:
     limit = values.get('daily_model_call_limit')
     if type(limit) is not int or not 1 <= limit <= 99999:
         raise ValueError('每日模型调用上限需在 1 到 99999 次之间')
+    platform = str(values.get('read_platform', 'all'))
+    if platform not in ('all', 'qq', 'wechat'):
+        raise ValueError('读取平台只能是 all、qq 或 wechat')
     return {
         'window_start': start,
         'window_end': end,
@@ -95,6 +99,7 @@ def validate_config(values: dict) -> dict:
         'min_read_interval_minutes': minutes,
         'model': model,
         'daily_model_call_limit': limit,
+        'read_platform': platform,
     }
 
 
@@ -335,6 +340,7 @@ def public_state() -> dict:
         'min_read_interval_minutes': config['min_read_interval_minutes'],
         'model': config['model'],
         'daily_model_call_limit': config['daily_model_call_limit'],
+        'read_platform': config.get('read_platform', 'all'),
         'auto_start': auto_start_enabled(),
         'privacy_confirmed': bool(config.get('privacy_confirmed')),
         'api_key_set': api_key_set(),

@@ -13,7 +13,7 @@ BUILD = DIST / 'portable_build'
 APP = BUILD / 'ChatNotice'
 EMBED_ZIP = BUILD / 'python-embed.zip'
 SITE = ROOT / '.venv' / 'Lib' / 'site-packages'
-OUTPUT = DIST / 'ChatNotice-portable-v2.1.1-dev-win64.zip'
+OUTPUT = DIST / 'ChatNotice-portable-v2.1.2-dev-win64.zip'
 
 APP_FILES = [
     'agent_assets.py', 'agent_cli.py', 'agent_config.py', 'agent_imports.py',

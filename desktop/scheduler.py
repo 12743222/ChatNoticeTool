@@ -91,6 +91,25 @@ def source_signature() -> str | None:
     return hashlib.sha256('\n'.join(sorted(entries)).encode('utf-8')).hexdigest()
 
 
+def _enabled_group_keys(platform: str) -> list[str]:
+    path = project_path('state/agent-config.json')
+    if not path.is_file():
+        return []
+    try:
+        config = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return []
+    sources = config.get('sources') or {}
+    keys = []
+    for key, group in (config.get('groups') or {}).items():
+        if not group.get('enabled'):
+            continue
+        source = sources.get(group.get('source_id')) or {}
+        if platform == 'all' or source.get('platform') == platform:
+            keys.append(key)
+    return keys
+
+
 def _agent_json(args: list[str], stdin_payload: dict | None = None,
                 timeout: float = 900.0) -> dict:
     command = [sys.executable, '-B', '-X', 'utf8', str(ROOT / 'agent_cli.py'), *args]
@@ -356,7 +375,14 @@ class AutomationScheduler:
                 if signature == config.get('last_source_signature'):
                     return {'ok': False, 'error': '源数据库未变化'}
         automation.update_runtime(last_attempt_at=_iso_now())
+        platform = str(config.get('read_platform') or 'all')
+        group_keys = _enabled_group_keys(platform)
+        if not pending_batch and not group_keys:
+            self._record('empty', error='没有启用的群，请先完成群聊标定')
+            return {'ok': False, 'error': '没有启用的群，请先完成群聊标定'}
         args = ['read', '--limit', '50']
+        for key in group_keys:
+            args.extend(['--group', key])
         if pending_batch:
             args = ['read', '--batch', pending_batch, '--cursor', str(pending_cursor or 0), '--limit', '50']
         try:
@@ -370,7 +396,10 @@ class AutomationScheduler:
                 pending_batch = None
                 signature = source_signature()
                 try:
-                    page = _agent_json(['read', '--limit', '50'], timeout=1800)
+                    retry_args = ['read', '--limit', '50']
+                    for key in group_keys:
+                        retry_args.extend(['--group', key])
+                    page = _agent_json(retry_args, timeout=1800)
                 except Exception as retry_error:
                     self._record('error', error=f'读取失败：{retry_error}')
                     return {'ok': False, 'error': f'读取失败：{retry_error}'}
