@@ -24,7 +24,7 @@ APP_FILES = [
     'glass_style.py', 'group_settings.py', 'groups.py', 'local_setup.py',
     'memory_reader.py', 'messages.py', 'project_core.py', 'rules_editor.py',
     'todo_detail.py', 'todo_store.py', 'todo_widget.py', 'wechat_content.py',
-    'widget_ui.py', 'config.example.json', 'requirements.txt',
+    'widget_ui.py', 'config.example.json', 'requirements.txt', 'diagnose_qq_groups.py',
 ]
 
 TCL_DIRS = ('tcl8', 'tcl8.6', 'tk8.6', 'tix8.4.3', 'dde1.4', 'reg1.3')
