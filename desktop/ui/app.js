@@ -667,7 +667,7 @@ async function undoCompleted(task, button) {
 
 /* ---------- group setup ---------- */
 
-const setupState = { data: null, groups: [], sourcesOk: [], wechatPaths: null };
+const setupState = { data: null, groups: [], sourcesOk: [], wechatPaths: null, qqSource: null };
 
 function setupStep(step) {
   for (let index = 1; index <= 4; index += 1) {
@@ -730,6 +730,7 @@ async function openGroupSetup() {
   $('#setup').classList.remove('hidden');
   setupState.groups = [];
   setupState.sourcesOk = [];
+  setupState.qqSource = null;
   $('#setup-consent').checked = false;
   $('#setup-platform-qq').checked = true;
   $('#setup-platform-wechat').checked = true;
@@ -770,9 +771,12 @@ async function authorizeSources() {
     });
     const failures = [];
     setupState.sourcesOk = [];
+    setupState.qqSource = null;
     for (const [platform, value] of Object.entries(result.results || {})) {
-      if (value.ok) setupState.sourcesOk.push(value.source_id);
-      else {
+      if (value.ok) {
+        setupState.sourcesOk.push(value.source_id);
+        if (platform === 'qq') setupState.qqSource = value.source_id;
+      } else {
         const hint = /凭据|密钥|key|内存/i.test(value.error)
           ? '（请确认客户端已登录，且 ChatNotice 与客户端权限级别一致）'
           : '';
@@ -786,9 +790,9 @@ async function authorizeSources() {
       const dataGroups = await api('/setup/groups?source_id=' + encodeURIComponent(sourceId));
       groups.push(...(dataGroups.groups || []));
     }
-    if (!groups.length) throw new Error('没有读取到群聊，请确认账号和目录');
     for (const group of groups) group._selected = Boolean(group.enabled);
     setupState.groups = groups;
+    $('#setup-manual').classList.toggle('hidden', !setupState.qqSource);
     renderSetupGroups();
     setupStep(3);
   } catch (error) {
@@ -809,6 +813,14 @@ function renderSetupGroups() {
   const list = $('#setup-groups');
   list.innerHTML = '';
   const visible = setupVisibleGroups();
+  if (!visible.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sync-empty';
+    empty.textContent = setupState.groups.length
+      ? '没有匹配的群。'
+      : '没有自动读取到群列表。可在上方手动输入 QQ 群号后保存。';
+    list.append(empty);
+  }
   for (const group of visible) {
     const row = document.createElement('label');
     row.className = 'setup-group';
@@ -837,6 +849,30 @@ function renderSetupGroups() {
   $('#setup-group-count').textContent = `${visible.length} / ${setupState.groups.length} 个群`;
   const visibleBoxes = [...list.querySelectorAll('input[type=checkbox]')];
   $('#setup-check-all').checked = visibleBoxes.length > 0 && visibleBoxes.every((box) => box.checked);
+}
+
+function addManualQqGroup() {
+  if (!setupState.qqSource) { toast('请先完成 QQ 授权'); return; }
+  const groupId = $('#setup-manual-id').value.trim();
+  if (!/^\d{5,12}$/.test(groupId)) { toast('请输入正确的 QQ 群号'); return; }
+  if (setupState.groups.some((group) => group.platform === 'qq' && group.group_id === groupId)) {
+    toast('这个群已经在列表里');
+    return;
+  }
+  const name = $('#setup-manual-name').value.trim() || groupId;
+  setupState.groups.push({
+    source_id: setupState.qqSource,
+    group_id: groupId,
+    name,
+    platform: 'qq',
+    configured: false,
+    enabled: false,
+    _selected: true,
+  });
+  $('#setup-manual-id').value = '';
+  $('#setup-manual-name').value = '';
+  renderSetupGroups();
+  toast('已添加，保存标定后生效');
 }
 
 async function saveSetupGroups() {
@@ -1602,6 +1638,7 @@ $('#setup-pick-wechat').addEventListener('click', async () => {
   }
 });
 $('#setup-search').addEventListener('input', renderSetupGroups);
+$('#setup-manual-add').addEventListener('click', addManualQqGroup);
 $('#setup-check-all').addEventListener('change', (event) => {
   for (const group of setupVisibleGroups()) group._selected = event.target.checked;
   renderSetupGroups();
