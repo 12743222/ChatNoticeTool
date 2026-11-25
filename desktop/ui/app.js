@@ -786,15 +786,25 @@ async function authorizeSources() {
     if (!setupState.sourcesOk.length) throw new Error(failures.join('；') || '授权失败');
     status.textContent = '凭据已就绪，正在读取群列表…' + (failures.length ? `（${failures.join('；')}）` : '');
     const groups = [];
+    const groupErrors = [];
     for (const sourceId of setupState.sourcesOk) {
-      const dataGroups = await api('/setup/groups?source_id=' + encodeURIComponent(sourceId));
-      groups.push(...(dataGroups.groups || []));
+      try {
+        const dataGroups = await api('/setup/groups?source_id=' + encodeURIComponent(sourceId));
+        groups.push(...(dataGroups.groups || []));
+      } catch (error) {
+        groupErrors.push(error.message);
+      }
     }
     for (const group of groups) group._selected = Boolean(group.enabled);
     setupState.groups = groups;
     $('#setup-manual').classList.toggle('hidden', !setupState.qqSource);
     renderSetupGroups();
     setupStep(3);
+    if (groupErrors.length) {
+      status.className = 'setup-status error';
+      status.textContent = '群列表读取失败：' + groupErrors.join('；')
+        + '。可在上方手动输入 QQ 群号后保存。';
+    }
   } catch (error) {
     status.classList.add('error');
     status.textContent = error.message;
